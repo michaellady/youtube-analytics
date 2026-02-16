@@ -1,0 +1,7 @@
+.env
+client_secret.json
+youtube-analytics
+node_modules/
+__pycache__/
+*.pyc
+data/

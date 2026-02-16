@@ -1,0 +1,194 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"google.golang.org/api/option"
+	"google.golang.org/api/youtubeanalytics/v2"
+)
+
+const analyticsBatchSize = 200
+
+func runFetchAnalytics(dataPath string) error {
+	// Load existing video data
+	data, err := loadData(dataPath)
+	if err != nil {
+		return fmt.Errorf("loading video data: %w\n\nRun 'fetch' first to download video data", err)
+	}
+
+	if len(data.Videos) == 0 {
+		return fmt.Errorf("no videos found in %s — run 'fetch' first", dataPath)
+	}
+
+	ctx := context.Background()
+	client, err := getOAuthClient(ctx)
+	if err != nil {
+		return fmt.Errorf("OAuth authentication failed: %w", err)
+	}
+
+	svc, err := youtubeanalytics.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return fmt.Errorf("creating YouTube Analytics service: %w", err)
+	}
+
+	// Determine date range from video publish dates
+	startDate, endDate := getDateRange(data.Videos)
+	fmt.Printf("Fetching analytics for %d videos (%s to %s)...\n", len(data.Videos), startDate, endDate)
+
+	// Build video ID lookup for merging results
+	videoIndex := make(map[string]int)
+	for i := range data.Videos {
+		videoIndex[data.Videos[i].ID] = i
+	}
+
+	// Batch query video IDs (API limit: ~200 IDs per filter)
+	ids := make([]string, len(data.Videos))
+	for i, v := range data.Videos {
+		ids[i] = v.ID
+	}
+
+	fetched := 0
+	for start := 0; start < len(ids); start += analyticsBatchSize {
+		end := start + analyticsBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := ids[start:end]
+
+		filter := "video==" + strings.Join(batch, ",")
+
+		resp, err := svc.Reports.Query().
+			Ids("channel==MINE").
+			StartDate(startDate).
+			EndDate(endDate).
+			Metrics("estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost").
+			Dimensions("video").
+			Filters(filter).
+			MaxResults(int64(len(batch))).
+			Do()
+		if err != nil {
+			return fmt.Errorf("querying analytics (batch %d-%d): %w", start, end, err)
+		}
+
+		// Build column index map
+		colIdx := make(map[string]int)
+		for i, h := range resp.ColumnHeaders {
+			colIdx[h.Name] = i
+		}
+
+		// Parse rows and merge into video data
+		for _, row := range resp.Rows {
+			videoID, ok := rowString(row, colIdx, "video")
+			if !ok {
+				continue
+			}
+			idx, exists := videoIndex[videoID]
+			if !exists {
+				continue
+			}
+
+			v := &data.Videos[idx]
+			v.EstimatedMinutesWatched = rowFloat(row, colIdx, "estimatedMinutesWatched")
+			v.AverageViewDuration = rowFloat(row, colIdx, "averageViewDuration")
+			v.AverageViewPercentage = rowFloat(row, colIdx, "averageViewPercentage")
+			v.SubscribersGained = rowInt(row, colIdx, "subscribersGained")
+			v.SubscribersLost = rowInt(row, colIdx, "subscribersLost")
+			fetched++
+		}
+
+		fmt.Printf("  Fetched batch %d-%d (%d videos with data)\n", start+1, end, len(resp.Rows))
+	}
+
+	fmt.Printf("Analytics data merged for %d/%d videos.\n", fetched, len(data.Videos))
+
+	// Update metadata
+	data.HasAnalytics = true
+	data.AnalyticsFetchedAt = time.Now()
+
+	// Save updated data
+	if err := saveData(dataPath, data); err != nil {
+		return fmt.Errorf("saving updated data: %w", err)
+	}
+	fmt.Printf("Updated %s with analytics data.\n", dataPath)
+	return nil
+}
+
+func getDateRange(videos []Video) (string, string) {
+	if len(videos) == 0 {
+		return "", ""
+	}
+	earliest := videos[0].PublishedAt
+	latest := videos[0].PublishedAt
+	for _, v := range videos[1:] {
+		if v.PublishedAt.Before(earliest) {
+			earliest = v.PublishedAt
+		}
+		if v.PublishedAt.After(latest) {
+			latest = v.PublishedAt
+		}
+	}
+	// End date is today (analytics may have data beyond last publish)
+	endDate := time.Now().Format("2006-01-02")
+	return earliest.Format("2006-01-02"), endDate
+}
+
+func saveData(path string, data *ChannelData) error {
+	if err := os.MkdirAll("data", 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(data)
+}
+
+// Row parsing helpers for youtubeanalytics QueryResponse rows ([][]interface{})
+func rowString(row []interface{}, colIdx map[string]int, col string) (string, bool) {
+	idx, ok := colIdx[col]
+	if !ok || idx >= len(row) {
+		return "", false
+	}
+	s, ok := row[idx].(string)
+	return s, ok
+}
+
+func rowFloat(row []interface{}, colIdx map[string]int, col string) float64 {
+	idx, ok := colIdx[col]
+	if !ok || idx >= len(row) {
+		return 0
+	}
+	switch v := row[idx].(type) {
+	case float64:
+		return v
+	case json.Number:
+		f, _ := v.Float64()
+		return f
+	default:
+		return 0
+	}
+}
+
+func rowInt(row []interface{}, colIdx map[string]int, col string) int64 {
+	idx, ok := colIdx[col]
+	if !ok || idx >= len(row) {
+		return 0
+	}
+	switch v := row[idx].(type) {
+	case float64:
+		return int64(v)
+	case json.Number:
+		i, _ := v.Int64()
+		return i
+	default:
+		return 0
+	}
+}
