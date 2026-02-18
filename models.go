@@ -65,6 +65,19 @@ type AnalysisResult struct {
 	WatchTimeOverTime  []WatchTimeBucket
 	TopByWatchTime     []Video
 	TopByRetention     []Video
+	TopBySubscribers   []Video
+	LiveWatchTime      WatchTimeAnalysis
+	SubsOverTime       []SubBucket
+}
+
+// SubBucket groups subscriber data by month.
+type SubBucket struct {
+	Period        string
+	Gained        int64
+	Lost          int64
+	Net           int64
+	VideoCount    int
+	SubsPerVideo  float64
 }
 
 // WatchTimeAnalysis holds aggregated watch time metrics.

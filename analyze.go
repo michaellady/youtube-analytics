@@ -117,6 +117,11 @@ func analyze(data *ChannelData) *AnalysisResult {
 		r.TopByRetention = topN(filterMinViews(data.Videos, 100), 10, func(a, b Video) bool {
 			return a.AverageViewPercentage > b.AverageViewPercentage
 		})
+		r.TopBySubscribers = topN(data.Videos, 10, func(a, b Video) bool {
+			return a.SubscribersGained > b.SubscribersGained
+		})
+		r.LiveWatchTime = analyzeWatchTime(live)
+		r.SubsOverTime = subsMonthlyBuckets(data.Videos)
 	}
 
 	return r
@@ -221,6 +226,13 @@ func engagementRate(v Video) float64 {
 		return 0
 	}
 	return float64(v.LikeCount+v.CommentCount) / float64(v.ViewCount)
+}
+
+func subConvRate(v Video) float64 {
+	if v.ViewCount == 0 {
+		return 0
+	}
+	return float64(v.SubscribersGained) / float64(v.ViewCount) * 100
 }
 
 var numberRe = regexp.MustCompile(`\d+`)
@@ -343,6 +355,32 @@ func watchTimeMonthlyBuckets(videos []Video) []WatchTimeBucket {
 		if b.VideoCount > 0 {
 			b.AvgMinutesPerVideo = b.TotalMinutes / float64(b.VideoCount)
 			b.AvgRetention = b.AvgRetention / float64(b.VideoCount)
+		}
+		result = append(result, *b)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Period < result[j].Period })
+	return result
+}
+
+func subsMonthlyBuckets(videos []Video) []SubBucket {
+	buckets := map[string]*SubBucket{}
+	for _, v := range videos {
+		key := v.PublishedAt.Format("2006-01")
+		b, ok := buckets[key]
+		if !ok {
+			b = &SubBucket{Period: key}
+			buckets[key] = b
+		}
+		b.Gained += v.SubscribersGained
+		b.Lost += v.SubscribersLost
+		b.VideoCount++
+	}
+
+	var result []SubBucket
+	for _, b := range buckets {
+		b.Net = b.Gained - b.Lost
+		if b.VideoCount > 0 {
+			b.SubsPerVideo = float64(b.Gained) / float64(b.VideoCount)
 		}
 		result = append(result, *b)
 	}
@@ -492,6 +530,53 @@ func printReport(r *AnalysisResult, data *ChannelData) {
 			fmt.Printf("  %2d. [%s] %s\n", i+1, v.VideoType, truncate(v.Title, 55))
 			fmt.Printf("      Retention: %.1f%%  Avg Duration: %.0fs  Views: %s\n",
 				v.AverageViewPercentage, v.AverageViewDuration, fmtNum(v.ViewCount))
+		}
+		fmt.Println()
+
+		fmt.Println("── Top 10 Videos by Subscribers Gained ────────────────────")
+		for i, v := range r.TopBySubscribers {
+			fmt.Printf("  %2d. [%s] %s\n", i+1, v.VideoType, truncate(v.Title, 55))
+			fmt.Printf("      Subs: +%d (-%d) | Views: %-10s | Conv: %.2f%%\n",
+				v.SubscribersGained, v.SubscribersLost, fmtNum(v.ViewCount),
+				subConvRate(v))
+		}
+		fmt.Println()
+
+		fmt.Println("── Subs per 1K Views by Content Type ──────────────────────")
+		for _, label := range []string{"Shorts", "Long-Form", "Live"} {
+			var w WatchTimeAnalysis
+			switch label {
+			case "Shorts":
+				w = r.ShortsWatchTime
+			case "Long-Form":
+				w = r.LongFormWatchTime
+			case "Live":
+				w = r.LiveWatchTime
+			}
+			var totalViews int64
+			for _, v := range data.Videos {
+				if (label == "Shorts" && v.VideoType == "short") ||
+					(label == "Long-Form" && v.VideoType == "long-form") ||
+					(label == "Live" && v.VideoType == "live") {
+					totalViews += v.ViewCount
+				}
+			}
+			rate := float64(0)
+			if totalViews > 0 {
+				rate = float64(w.SubscribersGained) / float64(totalViews) * 1000
+			}
+			fmt.Printf("  %-12s  %.2f subs/1K views  (+%d gained, -%d lost)\n",
+				label, rate, w.SubscribersGained, w.SubscribersLost)
+		}
+		fmt.Println()
+
+		fmt.Println("── Monthly Subscriber Trend ───────────────────────────────")
+		if len(r.SubsOverTime) > 0 {
+			fmt.Printf("  %-10s  %5s  %8s  %8s  %8s  %10s\n", "Month", "Vids", "Gained", "Lost", "Net", "Subs/Video")
+			for _, b := range r.SubsOverTime {
+				fmt.Printf("  %-10s  %5d  %8d  %8d  %+8d  %10.2f\n",
+					b.Period, b.VideoCount, b.Gained, b.Lost, b.Net, b.SubsPerVideo)
+			}
 		}
 		fmt.Println()
 

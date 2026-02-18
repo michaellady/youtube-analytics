@@ -76,9 +76,12 @@ type DashboardData struct {
 	WatchTimeStats     WatchTimeAnalysis
 	ShortsWatchTime    WatchTimeAnalysis
 	LongFormWatchTime  WatchTimeAnalysis
+	LiveWatchTime      WatchTimeAnalysis
 	WatchTimeJSON      template.JS
 	TopWatchVideos     []DashVideo
 	TopRetentionVideos []DashVideo
+	SubsJSON           template.JS
+	TopSubVideos       []DashVideo
 }
 
 type DashStats struct {
@@ -100,6 +103,8 @@ type DashVideo struct {
 	WatchTime   string
 	Retention   string
 	AvgDuration string
+	SubsGained  string
+	SubConv     string
 }
 
 type timelinePoint struct {
@@ -231,6 +236,35 @@ func buildDashboardData(data *ChannelData, r *AnalysisResult) DashboardData {
 		}
 		for _, v := range r.TopByRetention {
 			d.TopRetentionVideos = append(d.TopRetentionVideos, toDashVideoWT(v))
+		}
+
+		d.LiveWatchTime = r.LiveWatchTime
+
+		// Monthly subscriber data for chart
+		type subPoint struct {
+			X       string  `json:"x"`
+			Gained  int64   `json:"gained"`
+			Lost    int64   `json:"lost"`
+			Net     int64   `json:"net"`
+			PerVid  float64 `json:"perVid"`
+		}
+		var subPts []subPoint
+		for _, b := range r.SubsOverTime {
+			subPts = append(subPts, subPoint{X: b.Period, Gained: b.Gained, Lost: b.Lost, Net: b.Net, PerVid: b.SubsPerVideo})
+		}
+		if subPts == nil {
+			subPts = []subPoint{}
+		}
+		subJSON, _ := json.Marshal(subPts)
+		d.SubsJSON = template.JS(subJSON)
+
+		for _, v := range r.TopBySubscribers {
+			dv := toDashVideoWT(v)
+			dv.SubsGained = fmt.Sprintf("+%d", v.SubscribersGained)
+			if v.ViewCount > 0 {
+				dv.SubConv = fmt.Sprintf("%.2f%%", float64(v.SubscribersGained)/float64(v.ViewCount)*100)
+			}
+			d.TopSubVideos = append(d.TopSubVideos, dv)
 		}
 	}
 
@@ -469,6 +503,16 @@ const dashboardHTML = `<!DOCTYPE html>
     <h2>Subscriber Impact by Type</h2>
     <div class="chart-container"><canvas id="subChart"></canvas></div>
   </div>
+
+  <div class="chart-card full">
+    <h2>Monthly Subscriber Trend</h2>
+    <div class="chart-container"><canvas id="subTrendChart"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <h2>Subs per 1K Views by Type</h2>
+    <div class="chart-container"><canvas id="subRateChart"></canvas></div>
+  </div>
 {{end}}
 </div>
 
@@ -594,6 +638,28 @@ const dashboardHTML = `<!DOCTYPE html>
       <td>{{.Retention}}</td>
       <td>{{.AvgDuration}}</td>
       <td>{{.Views}}</td>
+      <td>{{.Date}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+
+<!-- Top Videos by Subscribers -->
+<div class="section">
+  <h2>Top 10 Videos by Subscribers Gained</h2>
+  <table>
+    <thead><tr><th></th><th>Title</th><th>Type</th><th>Subs</th><th>Conv Rate</th><th>Views</th><th>Watch Time</th><th>Published</th></tr></thead>
+    <tbody>
+    {{range .TopSubVideos}}
+    <tr>
+      <td><img class="title-thumb" src="{{.Thumbnail}}" alt="" loading="lazy"></td>
+      <td><a href="{{.URL}}" target="_blank">{{.Title}}</a></td>
+      <td><span class="type-badge {{.Type}}">{{.Type}}</span></td>
+      <td>{{.SubsGained}}</td>
+      <td>{{.SubConv}}</td>
+      <td>{{.Views}}</td>
+      <td>{{.WatchTime}}</td>
       <td>{{.Date}}</td>
     </tr>
     {{end}}
@@ -832,18 +898,18 @@ new Chart(document.getElementById('watchTypeChart'), {
 new Chart(document.getElementById('subChart'), {
   type: 'bar',
   data: {
-    labels: ['Shorts', 'Long-Form'],
+    labels: ['Shorts', 'Long-Form', 'Live'],
     datasets: [
       {
         label: 'Gained',
-        data: [{{.ShortsWatchTime.SubscribersGained}}, {{.LongFormWatchTime.SubscribersGained}}],
+        data: [{{.ShortsWatchTime.SubscribersGained}}, {{.LongFormWatchTime.SubscribersGained}}, {{.LiveWatchTime.SubscribersGained}}],
         backgroundColor: '#2ecc7188',
         borderColor: '#2ecc71',
         borderWidth: 1
       },
       {
         label: 'Lost',
-        data: [{{.ShortsWatchTime.SubscribersLost}}, {{.LongFormWatchTime.SubscribersLost}}],
+        data: [{{.ShortsWatchTime.SubscribersLost}}, {{.LongFormWatchTime.SubscribersLost}}, {{.LiveWatchTime.SubscribersLost}}],
         backgroundColor: '#e74c3c88',
         borderColor: '#e74c3c',
         borderWidth: 1
@@ -858,6 +924,89 @@ new Chart(document.getElementById('subChart'), {
     }
   }
 });
+
+// Monthly subscriber trend
+const subData = {{.SubsJSON}};
+new Chart(document.getElementById('subTrendChart'), {
+  type: 'bar',
+  data: {
+    labels: subData.map(d => d.x),
+    datasets: [
+      {
+        label: 'Gained',
+        data: subData.map(d => d.gained),
+        backgroundColor: '#2ecc7188',
+        borderColor: '#2ecc71',
+        borderWidth: 1
+      },
+      {
+        label: 'Lost',
+        data: subData.map(d => -d.lost),
+        backgroundColor: '#e74c3c88',
+        borderColor: '#e74c3c',
+        borderWidth: 1
+      },
+      {
+        label: 'Net',
+        data: subData.map(d => d.net),
+        borderColor: '#f39c12',
+        backgroundColor: '#f39c1222',
+        type: 'line',
+        fill: false,
+        tension: 0.3,
+        pointRadius: 4,
+        borderWidth: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: { title: { display: true, text: 'Subscribers' } }
+    }
+  }
+});
+
+// Subs per 1K views by type
+(function() {
+  const types = ['Shorts', 'Long-Form', 'Live'];
+  const gained = [{{.ShortsWatchTime.SubscribersGained}}, {{.LongFormWatchTime.SubscribersGained}}, {{.LiveWatchTime.SubscribersGained}}];
+  // Calculate total views per type from the timeline data
+  const shortViews = tlData.shorts.reduce((s,p) => s + p.y, 0);
+  const lfViews = tlData.longform.reduce((s,p) => s + p.y, 0);
+  const liveViews = tlData.live.reduce((s,p) => s + p.y, 0);
+  const views = [shortViews, lfViews, liveViews];
+  const rates = gained.map((g, i) => views[i] > 0 ? (g / views[i] * 1000) : 0);
+
+  new Chart(document.getElementById('subRateChart'), {
+    type: 'bar',
+    data: {
+      labels: types,
+      datasets: [{
+        label: 'Subs per 1K Views',
+        data: rates,
+        backgroundColor: [chartColors.short + '88', chartColors['long-form'] + '88', chartColors.live + '88'],
+        borderColor: [chartColors.short, chartColors['long-form'], chartColors.live],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.raw.toFixed(2) + ' subs per 1K views'
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Subs per 1K Views' } }
+      }
+    }
+  });
+})();
 {{end}}
 </script>
 </body>
