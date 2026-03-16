@@ -122,6 +122,19 @@ func analyze(data *ChannelData) *AnalysisResult {
 		})
 		r.LiveWatchTime = analyzeWatchTime(live)
 		r.SubsOverTime = subsMonthlyBuckets(data.Videos)
+
+		// Monetization analysis
+		r.Revenue = analyzeRevenue(data.Videos)
+		if r.Revenue.TotalRevenue > 0 {
+			r.HasMonetization = true
+			r.ShortsRevenue = analyzeRevenue(shorts)
+			r.LongFormRevenue = analyzeRevenue(longform)
+			r.LiveRevenue = analyzeRevenue(live)
+			r.RevenueOverTime = revenueMonthlyBuckets(data.Videos)
+			r.TopByRevenue = topN(data.Videos, 10, func(a, b Video) bool {
+				return a.EstimatedRevenue > b.EstimatedRevenue
+			})
+		}
 	}
 
 	return r
@@ -388,6 +401,61 @@ func subsMonthlyBuckets(videos []Video) []SubBucket {
 	return result
 }
 
+func analyzeRevenue(videos []Video) RevenueAnalysis {
+	if len(videos) == 0 {
+		return RevenueAnalysis{}
+	}
+	r := RevenueAnalysis{}
+	cpmCount := 0
+	var totalViews int64
+	for _, v := range videos {
+		r.TotalRevenue += v.EstimatedRevenue
+		r.TotalAdImpressions += v.AdImpressions
+		r.TotalMonetized += v.MonetizedPlaybacks
+		totalViews += v.ViewCount
+		if v.CPM > 0 {
+			r.AvgCPM += v.CPM
+			cpmCount++
+		}
+	}
+	r.AvgRevenuePerVideo = r.TotalRevenue / float64(len(videos))
+	if cpmCount > 0 {
+		r.AvgCPM = r.AvgCPM / float64(cpmCount)
+	}
+	if totalViews > 0 {
+		r.RPM = r.TotalRevenue / float64(totalViews) * 1000
+	}
+	return r
+}
+
+func revenueMonthlyBuckets(videos []Video) []RevenueBucket {
+	buckets := map[string]*RevenueBucket{}
+	for _, v := range videos {
+		key := v.PublishedAt.Format("2006-01")
+		b, ok := buckets[key]
+		if !ok {
+			b = &RevenueBucket{Period: key}
+			buckets[key] = b
+		}
+		b.TotalRevenue += v.EstimatedRevenue
+		b.TotalViews += v.ViewCount
+		b.VideoCount++
+	}
+
+	var result []RevenueBucket
+	for _, b := range buckets {
+		if b.VideoCount > 0 {
+			b.AvgRevPerVideo = b.TotalRevenue / float64(b.VideoCount)
+		}
+		if b.TotalViews > 0 {
+			b.RPM = b.TotalRevenue / float64(b.TotalViews) * 1000
+		}
+		result = append(result, *b)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Period < result[j].Period })
+	return result
+}
+
 func parseDateStr(s string) (time.Time, error) {
 	return time.Parse("2006-01-02", s)
 }
@@ -589,6 +657,56 @@ func printReport(r *AnalysisResult, data *ChannelData) {
 			}
 		}
 		fmt.Println()
+
+		// --- Monetization ---
+		if r.HasMonetization {
+			fmt.Println("── Revenue Overview ───────────────────────────────────────")
+			fmt.Printf("  Total estimated revenue:  $%.2f\n", r.Revenue.TotalRevenue)
+			fmt.Printf("  Avg per video:            $%.4f\n", r.Revenue.AvgRevenuePerVideo)
+			fmt.Printf("  Avg CPM:                  $%.2f\n", r.Revenue.AvgCPM)
+			fmt.Printf("  RPM (rev per 1K views):   $%.4f\n", r.Revenue.RPM)
+			fmt.Printf("  Total ad impressions:     %s\n", fmtNum(r.Revenue.TotalAdImpressions))
+			fmt.Printf("  Monetized playbacks:      %s\n", fmtNum(r.Revenue.TotalMonetized))
+			fmt.Println()
+
+			fmt.Println("── Revenue by Content Type ────────────────────────────────")
+			fmt.Printf("  %-12s  %10s  %10s  %10s  %10s\n", "Type", "Revenue", "Avg/Video", "CPM", "RPM")
+			for _, t := range []struct {
+				name string
+				r    RevenueAnalysis
+			}{
+				{"Shorts", r.ShortsRevenue},
+				{"Long-Form", r.LongFormRevenue},
+				{"Live", r.LiveRevenue},
+			} {
+				fmt.Printf("  %-12s  $%9.2f  $%9.4f  $%9.2f  $%9.4f\n",
+					t.name, t.r.TotalRevenue, t.r.AvgRevenuePerVideo, t.r.AvgCPM, t.r.RPM)
+			}
+			fmt.Println()
+
+			fmt.Println("── Top 10 Videos by Revenue ───────────────────────────────")
+			for i, v := range r.TopByRevenue {
+				fmt.Printf("  %2d. [%s] %s\n", i+1, v.VideoType, truncate(v.Title, 55))
+				fmt.Printf("      Revenue: $%.2f  Views: %-10s  CPM: $%.2f\n",
+					v.EstimatedRevenue, fmtNum(v.ViewCount), v.CPM)
+			}
+			fmt.Println()
+
+			fmt.Println("── Monthly Revenue Trend ──────────────────────────────────")
+			if len(r.RevenueOverTime) > 0 {
+				fmt.Printf("  %-10s  %5s  %10s  %10s  %10s\n", "Month", "Vids", "Revenue", "Avg/Video", "RPM")
+				for _, b := range r.RevenueOverTime {
+					fmt.Printf("  %-10s  %5d  $%9.2f  $%9.4f  $%9.4f\n",
+						b.Period, b.VideoCount, b.TotalRevenue, b.AvgRevPerVideo, b.RPM)
+				}
+			}
+			fmt.Println()
+		} else if r.HasAnalytics {
+			fmt.Println("── Revenue ────────────────────────────────────────────────")
+			fmt.Println("  No monetization data available.")
+			fmt.Println("  (Channel may not be monetized, or revenue data is $0.00)")
+			fmt.Println()
+		}
 	}
 
 	fmt.Println("═══════════════════════════════════════════════════════════")

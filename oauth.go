@@ -31,7 +31,10 @@ func getOAuthClient(ctx context.Context) (*http.Client, error) {
 		return nil, fmt.Errorf("reading %s: %w\n\nTo set up OAuth2:\n1. Go to Google Cloud Console → APIs & Services → Credentials\n2. Create an OAuth 2.0 Client ID (Desktop app)\n3. Download the JSON and save as %s", clientSecretPath, err, clientSecretPath)
 	}
 
-	config, err := google.ConfigFromJSON(b, youtubeanalytics.YtAnalyticsReadonlyScope)
+	config, err := google.ConfigFromJSON(b,
+		youtubeanalytics.YtAnalyticsReadonlyScope,
+		youtubeanalytics.YtAnalyticsMonetaryReadonlyScope,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("parsing client secret: %w", err)
 	}

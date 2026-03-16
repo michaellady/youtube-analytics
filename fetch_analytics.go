@@ -66,7 +66,7 @@ func runFetchAnalytics(dataPath string) error {
 			Ids("channel==MINE").
 			StartDate(startDate).
 			EndDate(endDate).
-			Metrics("estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost").
+			Metrics("estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost,estimatedRevenue,adImpressions,cpm,monetizedPlaybacks").
 			Dimensions("video").
 			Filters(filter).
 			MaxResults(int64(len(batch))).
@@ -98,6 +98,10 @@ func runFetchAnalytics(dataPath string) error {
 			v.AverageViewPercentage = rowFloat(row, colIdx, "averageViewPercentage")
 			v.SubscribersGained = rowInt(row, colIdx, "subscribersGained")
 			v.SubscribersLost = rowInt(row, colIdx, "subscribersLost")
+			v.EstimatedRevenue = rowFloat(row, colIdx, "estimatedRevenue")
+			v.AdImpressions = rowInt(row, colIdx, "adImpressions")
+			v.CPM = rowFloat(row, colIdx, "cpm")
+			v.MonetizedPlaybacks = rowInt(row, colIdx, "monetizedPlaybacks")
 			fetched++
 		}
 

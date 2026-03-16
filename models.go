@@ -23,6 +23,12 @@ type Video struct {
 	AverageViewPercentage   float64 `json:"average_view_percentage,omitempty"`   // 0-100
 	SubscribersGained       int64   `json:"subscribers_gained,omitempty"`
 	SubscribersLost         int64   `json:"subscribers_lost,omitempty"`
+
+	// Monetization fields (requires yt-analytics-monetary.readonly scope)
+	EstimatedRevenue float64 `json:"estimated_revenue,omitempty"` // USD
+	AdImpressions    int64   `json:"ad_impressions,omitempty"`
+	CPM              float64 `json:"cpm,omitempty"`                // cost per mille
+	MonetizedPlaybacks int64 `json:"monetized_playbacks,omitempty"`
 }
 
 // ChannelData is the top-level structure saved to data/videos.json.
@@ -68,6 +74,15 @@ type AnalysisResult struct {
 	TopBySubscribers   []Video
 	LiveWatchTime      WatchTimeAnalysis
 	SubsOverTime       []SubBucket
+
+	// Monetization
+	HasMonetization       bool
+	Revenue               RevenueAnalysis
+	ShortsRevenue         RevenueAnalysis
+	LongFormRevenue       RevenueAnalysis
+	LiveRevenue           RevenueAnalysis
+	RevenueOverTime       []RevenueBucket
+	TopByRevenue          []Video
 }
 
 // SubBucket groups subscriber data by month.
@@ -122,6 +137,26 @@ type TimeBucket struct {
 	AvgViews   float64
 	TotalViews int64
 	AvgEng     float64
+}
+
+// RevenueAnalysis holds aggregated monetization metrics.
+type RevenueAnalysis struct {
+	TotalRevenue       float64
+	AvgRevenuePerVideo float64
+	TotalAdImpressions int64
+	TotalMonetized     int64
+	AvgCPM             float64
+	RPM                float64 // revenue per mille (per 1K views)
+}
+
+// RevenueBucket groups revenue data by month.
+type RevenueBucket struct {
+	Period         string
+	TotalRevenue   float64
+	VideoCount     int
+	AvgRevPerVideo float64
+	TotalViews     int64
+	RPM            float64
 }
 
 // TitleInsights compares title characteristics of top vs bottom performers.
