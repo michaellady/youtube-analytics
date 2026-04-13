@@ -41,6 +41,10 @@ func main() {
 		err = cmdVideo(args)
 	case "export":
 		err = cmdExport(args)
+	case "suggest-tags":
+		err = cmdSuggestTags(args)
+	case "update-tags":
+		err = cmdUpdateTags(args)
 	case "-h", "--help", "help":
 		printUsage()
 		return
@@ -69,6 +73,8 @@ func printUsage() {
 	fmt.Println("  titles            Title pattern analysis for top performers")
 	fmt.Println("  video <id>        Deep-dive on a single video")
 	fmt.Println("  export            Export video data as CSV/TSV")
+	fmt.Println("  suggest-tags      Generate data/tags.json with rule-based tag recommendations")
+	fmt.Println("  update-tags       Preview or push tag updates to YouTube (dry-run default)")
 	fmt.Println()
 	fmt.Println("Common flags (analyze, dashboard, export):")
 	fmt.Println("  --since YYYY-MM-DD        Filter videos published on/after this date")
@@ -252,6 +258,39 @@ func cmdVideo(args []string) error {
 		return fmt.Errorf("video requires a YouTube video ID argument")
 	}
 	return runVideo("data/videos.json", fs.Arg(0))
+}
+
+func cmdSuggestTags(args []string) error {
+	fs := flag.NewFlagSet("suggest-tags", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	output := fs.String("output", "data/tags.json", "path to write recommendations")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	// Default to live-only when no type filter is set — that's the primary use case.
+	if len(filter.Types) == 0 {
+		filter.Types = []string{"live"}
+	}
+	return runSuggestTags("data/videos.json", *output, filter)
+}
+
+func cmdUpdateTags(args []string) error {
+	fs := flag.NewFlagSet("update-tags", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	input := fs.String("input", "data/tags.json", "path to tags file")
+	apply := fs.Bool("apply", false, "actually push updates (default is dry-run preview)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runUpdateTags("data/videos.json", *input, filter, *apply)
 }
 
 func cmdExport(args []string) error {

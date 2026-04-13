@@ -17,31 +17,48 @@ import (
 )
 
 const (
-	tokenPath        = "data/token.json"
-	clientSecretPath = "client_secret.json"
-	oauthCallbackPort = "8089"
+	analyticsTokenPath = "data/token.json"
+	writeTokenPath     = "data/token_write.json"
+	clientSecretPath   = "client_secret.json"
+	oauthCallbackPort  = "8089"
 )
+
+// analyticsScopes are read-only scopes for the Analytics API.
+var analyticsScopes = []string{
+	youtubeanalytics.YtAnalyticsReadonlyScope,
+	youtubeanalytics.YtAnalyticsMonetaryReadonlyScope,
+}
+
+// writeScopes grant edit access to videos (tags, titles, descriptions, etc.).
+var writeScopes = []string{"https://www.googleapis.com/auth/youtube.force-ssl"}
+
+// getAnalyticsClient returns a read-only OAuth2 client for the Analytics API.
+func getAnalyticsClient(ctx context.Context) (*http.Client, error) {
+	return getOAuthClient(ctx, analyticsScopes, analyticsTokenPath)
+}
+
+// getWriteClient returns an OAuth2 client with scope to edit videos.
+func getWriteClient(ctx context.Context) (*http.Client, error) {
+	return getOAuthClient(ctx, writeScopes, writeTokenPath)
+}
 
 // getOAuthClient returns an authenticated HTTP client using OAuth2.
 // It loads client_secret.json, checks for a saved token, and if needed
 // starts a local server to handle the OAuth callback.
-func getOAuthClient(ctx context.Context) (*http.Client, error) {
+func getOAuthClient(ctx context.Context, scopes []string, tokenPath string) (*http.Client, error) {
 	b, err := os.ReadFile(clientSecretPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w\n\nTo set up OAuth2:\n1. Go to Google Cloud Console → APIs & Services → Credentials\n2. Create an OAuth 2.0 Client ID (Desktop app)\n3. Download the JSON and save as %s", clientSecretPath, err, clientSecretPath)
 	}
 
-	config, err := google.ConfigFromJSON(b,
-		youtubeanalytics.YtAnalyticsReadonlyScope,
-		youtubeanalytics.YtAnalyticsMonetaryReadonlyScope,
-	)
+	config, err := google.ConfigFromJSON(b, scopes...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing client secret: %w", err)
 	}
 	config.RedirectURL = "http://localhost:" + oauthCallbackPort + "/callback"
 
 	// Try loading saved token
-	token, err := loadToken()
+	token, err := loadTokenFrom(tokenPath)
 	if err == nil && token.Valid() {
 		return config.Client(ctx, token), nil
 	}
@@ -50,7 +67,7 @@ func getOAuthClient(ctx context.Context) (*http.Client, error) {
 		src := config.TokenSource(ctx, token)
 		newToken, refreshErr := src.Token()
 		if refreshErr == nil {
-			_ = saveToken(newToken)
+			_ = saveTokenTo(newToken, tokenPath)
 			return config.Client(ctx, newToken), nil
 		}
 	}
@@ -60,7 +77,7 @@ func getOAuthClient(ctx context.Context) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := saveToken(token); err != nil {
+	if err := saveTokenTo(token, tokenPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save token: %v\n", err)
 	}
 	return config.Client(ctx, token), nil
@@ -115,8 +132,8 @@ func doOAuthFlow(ctx context.Context, config *oauth2.Config) (*oauth2.Token, err
 	}
 }
 
-func loadToken() (*oauth2.Token, error) {
-	f, err := os.Open(tokenPath)
+func loadTokenFrom(path string) (*oauth2.Token, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +145,11 @@ func loadToken() (*oauth2.Token, error) {
 	return &token, nil
 }
 
-func saveToken(token *oauth2.Token) error {
+func saveTokenTo(token *oauth2.Token, path string) error {
 	if err := os.MkdirAll("data", 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(tokenPath)
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}

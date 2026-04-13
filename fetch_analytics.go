@@ -26,7 +26,7 @@ func runFetchAnalytics(dataPath string) error {
 	}
 
 	ctx := context.Background()
-	client, err := getOAuthClient(ctx)
+	client, err := getAnalyticsClient(ctx)
 	if err != nil {
 		return fmt.Errorf("OAuth authentication failed: %w", err)
 	}
