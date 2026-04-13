@@ -64,10 +64,47 @@ go run . dashboard
 
 | Command | Description |
 |---|---|
-| `fetch` | Fetch all video metadata from YouTube Data API v3. Saves to `data/videos.json` |
+| `fetch` | Fetch all video metadata from YouTube Data API v3. Saves to `data/videos.json` and snapshots to `data/snapshots/` (keeps last 30) |
 | `fetch-analytics` | Fetch watch time data via OAuth2. Merges into `data/videos.json` |
-| `analyze` | Print a detailed terminal report with trends and insights |
+| `analyze` | Print a detailed terminal report. Supports `--diff <snapshot>` and `--compare-periods A..B C..D` modes |
 | `dashboard` | Generate an interactive HTML dashboard at `data/dashboard.html` |
+| `find-duplicates` | Detect near-duplicate uploads (same title, similar duration, close timestamps) |
+| `data-quality` | Report videos missing tags, with short or templated descriptions, or missing thumbnails |
+| `titles` | Title pattern analysis with keyword lift for top performers |
+| `video <id>` | Deep-dive on a single video with all analytics fields |
+| `export` | Flatten video data to CSV or TSV |
+
+### Filter flags
+
+`analyze`, `dashboard`, `find-duplicates`, `data-quality`, `titles`, and `export` all accept:
+
+| Flag | Description |
+|---|---|
+| `--since YYYY-MM-DD` | Videos published on or after this date |
+| `--until YYYY-MM-DD` | Videos published on or before this date |
+| `--type <short\|long-form\|live>` | Filter by video type (repeatable) |
+| `--duration-min N` | Minimum duration in seconds |
+| `--duration-max N` | Maximum duration in seconds |
+| `--exclude <ID>` | Exclude a specific video ID (repeatable) |
+
+Examples:
+
+```bash
+# Recent 3-10 min long-form only
+go run . analyze --since 2026-04-01 --type long-form --duration-min 180 --duration-max 600
+
+# Title pattern for top live streams
+go run . titles --top 10 --by views --type live
+
+# Export recent videos to CSV
+go run . export --format csv --since 2026-04-01 --output recent.csv
+
+# Delta since a snapshot
+go run . analyze --diff data/snapshots/videos-20260401T000000Z.json
+
+# Compare two months side-by-side
+go run . analyze --compare-periods 2026-01-01..2026-01-31 2026-03-01..2026-03-31
+```
 
 ## What You Get
 
@@ -98,13 +135,20 @@ All watch time sections gracefully degrade if `fetch-analytics` hasn't been run.
 
 ```
 .
-├── main.go              # CLI entry point and subcommand routing
-├── models.go            # Data types (Video, ChannelData, analysis types)
+├── main.go              # CLI entry point, flag.FlagSet dispatch, shared filter flags
+├── models.go            # Data types (Video, ChannelData, VideoFilter, analysis types)
 ├── fetch.go             # YouTube Data API v3 video fetcher
 ├── oauth.go             # OAuth2 flow (local callback server, token management)
 ├── fetch_analytics.go   # YouTube Analytics API v2 queries
+├── snapshot.go          # Per-fetch snapshots of videos.json
 ├── analyze.go           # Analysis logic and terminal report
 ├── dashboard.go         # HTML dashboard generation (Chart.js)
+├── diff.go              # analyze --diff + --compare-periods
+├── duplicates.go        # find-duplicates subcommand
+├── data_quality.go      # data-quality subcommand
+├── titles.go            # titles subcommand
+├── video.go             # video <id> subcommand
+├── export.go            # export subcommand
 ├── go.mod
 ├── go.sum
 ├── .env                 # API key and channel handle (not committed)
@@ -112,5 +156,6 @@ All watch time sections gracefully degrade if `fetch-analytics` hasn't been run.
 └── data/                # Output directory (not committed)
     ├── videos.json      # Fetched video + analytics data
     ├── token.json       # Saved OAuth2 token
-    └── dashboard.html   # Generated dashboard
+    ├── dashboard.html   # Generated dashboard
+    └── snapshots/       # Auto-saved videos.json snapshots (keeps last 30)
 ```

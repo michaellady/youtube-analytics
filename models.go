@@ -1,6 +1,10 @@
 package main
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Video represents a single YouTube video with all metadata and statistics.
 type Video struct {
@@ -157,6 +161,86 @@ type RevenueBucket struct {
 	AvgRevPerVideo float64
 	TotalViews     int64
 	RPM            float64
+}
+
+// VideoFilter restricts a []Video slice by published date, video type, duration, or id.
+// A zero-valued field means "no bound" for that dimension.
+type VideoFilter struct {
+	Since      time.Time
+	Until      time.Time
+	Types      []string
+	DurMinSec  int
+	DurMaxSec  int
+	ExcludeIDs map[string]bool
+}
+
+func (f VideoFilter) IsZero() bool {
+	return f.Since.IsZero() && f.Until.IsZero() && len(f.Types) == 0 &&
+		f.DurMinSec == 0 && f.DurMaxSec == 0 && len(f.ExcludeIDs) == 0
+}
+
+func (f VideoFilter) Apply(videos []Video) []Video {
+	if f.IsZero() {
+		return videos
+	}
+	typeSet := map[string]bool{}
+	for _, t := range f.Types {
+		typeSet[t] = true
+	}
+	out := make([]Video, 0, len(videos))
+	for _, v := range videos {
+		if f.ExcludeIDs[v.ID] {
+			continue
+		}
+		if !f.Since.IsZero() && v.PublishedAt.Before(f.Since) {
+			continue
+		}
+		if !f.Until.IsZero() && v.PublishedAt.After(f.Until) {
+			continue
+		}
+		if len(typeSet) > 0 && !typeSet[v.VideoType] {
+			continue
+		}
+		if f.DurMinSec > 0 && v.DurationSeconds < f.DurMinSec {
+			continue
+		}
+		if f.DurMaxSec > 0 && v.DurationSeconds > f.DurMaxSec {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// Describe returns a human-readable filter summary for report headers. Empty when filter is zero.
+func (f VideoFilter) Describe() string {
+	if f.IsZero() {
+		return ""
+	}
+	var parts []string
+	if !f.Since.IsZero() {
+		parts = append(parts, "since "+f.Since.Format("2006-01-02"))
+	}
+	if !f.Until.IsZero() {
+		parts = append(parts, "until "+f.Until.Format("2006-01-02"))
+	}
+	if len(f.Types) > 0 {
+		parts = append(parts, "type="+strings.Join(f.Types, "|"))
+	}
+	if f.DurMinSec > 0 || f.DurMaxSec > 0 {
+		lo, hi := "", ""
+		if f.DurMinSec > 0 {
+			lo = fmt.Sprintf("%d", f.DurMinSec)
+		}
+		if f.DurMaxSec > 0 {
+			hi = fmt.Sprintf("%d", f.DurMaxSec)
+		}
+		parts = append(parts, fmt.Sprintf("duration=%s..%ss", lo, hi))
+	}
+	if len(f.ExcludeIDs) > 0 {
+		parts = append(parts, fmt.Sprintf("excluded=%d", len(f.ExcludeIDs)))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }
 
 // TitleInsights compares title characteristics of top vs bottom performers.

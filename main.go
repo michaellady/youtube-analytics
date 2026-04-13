@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -15,24 +18,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	cmd := os.Args[1]
+	args := os.Args[2:]
+
 	var err error
-	switch os.Args[1] {
+	switch cmd {
 	case "fetch":
-		apiKey := os.Getenv("YOUTUBE_API_KEY")
-		handle := os.Getenv("CHANNEL_HANDLE")
-		if apiKey == "" || handle == "" {
-			fmt.Fprintln(os.Stderr, "Error: YOUTUBE_API_KEY and CHANNEL_HANDLE must be set in .env")
-			os.Exit(1)
-		}
-		err = runFetch(apiKey, handle)
-	case "analyze":
-		err = runAnalyze("data/videos.json")
-	case "dashboard":
-		err = runDashboard("data/videos.json", "data/dashboard.html")
+		err = cmdFetch(args)
 	case "fetch-analytics":
-		err = runFetchAnalytics("data/videos.json")
+		err = cmdFetchAnalytics(args)
+	case "analyze":
+		err = cmdAnalyze(args)
+	case "dashboard":
+		err = cmdDashboard(args)
+	case "find-duplicates":
+		err = cmdFindDuplicates(args)
+	case "data-quality":
+		err = cmdDataQuality(args)
+	case "titles":
+		err = cmdTitles(args)
+	case "video":
+		err = cmdVideo(args)
+	case "export":
+		err = cmdExport(args)
+	case "-h", "--help", "help":
+		printUsage()
+		return
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
 		printUsage()
 		os.Exit(1)
 	}
@@ -44,11 +57,214 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("Usage: youtube-analytics <command>")
+	fmt.Println("Usage: youtube-analytics <command> [flags]")
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  fetch             Fetch all video data from YouTube API → data/videos.json")
 	fmt.Println("  fetch-analytics   Fetch watch time data via OAuth2 → merge into data/videos.json")
 	fmt.Println("  analyze           Analyze data and print terminal report")
 	fmt.Println("  dashboard         Generate interactive HTML dashboard → data/dashboard.html")
+	fmt.Println("  find-duplicates   Detect near-duplicate uploads")
+	fmt.Println("  data-quality      Report on missing tags, templated descriptions, etc.")
+	fmt.Println("  titles            Title pattern analysis for top performers")
+	fmt.Println("  video <id>        Deep-dive on a single video")
+	fmt.Println("  export            Export video data as CSV/TSV")
+	fmt.Println()
+	fmt.Println("Common flags (analyze, dashboard, export):")
+	fmt.Println("  --since YYYY-MM-DD        Filter videos published on/after this date")
+	fmt.Println("  --until YYYY-MM-DD        Filter videos published on/before this date")
+	fmt.Println("  --type <short|long-form|live>   Filter by video type (repeatable)")
+	fmt.Println("  --duration-min N          Minimum duration in seconds")
+	fmt.Println("  --duration-max N          Maximum duration in seconds")
+	fmt.Println("  --exclude <ID>            Exclude a specific video ID (repeatable)")
+	fmt.Println()
+	fmt.Println("Analyze-only:")
+	fmt.Println("  --diff <snapshot.json>    Delta report vs. a prior videos.json")
+	fmt.Println("  --compare-periods A..B C..D  Side-by-side stats for two date ranges")
+}
+
+// stringSliceFlag collects repeated --flag values into a slice.
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
+
+// filterFlags binds filter-related flags onto a FlagSet and returns a resolver
+// that produces a VideoFilter after fs.Parse has run.
+type filterFlags struct {
+	since, until           string
+	types                  stringSliceFlag
+	durMin, durMax         int
+	excludes               stringSliceFlag
+}
+
+func addFilterFlags(fs *flag.FlagSet) *filterFlags {
+	ff := &filterFlags{}
+	fs.StringVar(&ff.since, "since", "", "filter videos published on or after YYYY-MM-DD")
+	fs.StringVar(&ff.until, "until", "", "filter videos published on or before YYYY-MM-DD")
+	fs.Var(&ff.types, "type", "filter by video type: short|long-form|live (repeatable)")
+	fs.IntVar(&ff.durMin, "duration-min", 0, "minimum duration in seconds")
+	fs.IntVar(&ff.durMax, "duration-max", 0, "maximum duration in seconds")
+	fs.Var(&ff.excludes, "exclude", "exclude a specific video ID (repeatable)")
+	return ff
+}
+
+func (ff *filterFlags) build() (VideoFilter, error) {
+	f := VideoFilter{
+		DurMinSec: ff.durMin,
+		DurMaxSec: ff.durMax,
+		Types:     []string(ff.types),
+	}
+	if ff.since != "" {
+		t, err := parseDateStr(ff.since)
+		if err != nil {
+			return f, fmt.Errorf("--since: %w", err)
+		}
+		f.Since = t
+	}
+	if ff.until != "" {
+		t, err := parseDateStr(ff.until)
+		if err != nil {
+			return f, fmt.Errorf("--until: %w", err)
+		}
+		// Include the whole --until day by rolling to 23:59:59.
+		f.Until = t.Add(24*time.Hour - time.Second)
+	}
+	for _, t := range f.Types {
+		if t != "short" && t != "long-form" && t != "live" {
+			return f, fmt.Errorf("--type: %q must be short|long-form|live", t)
+		}
+	}
+	if len(ff.excludes) > 0 {
+		f.ExcludeIDs = map[string]bool{}
+		for _, id := range ff.excludes {
+			f.ExcludeIDs[id] = true
+		}
+	}
+	return f, nil
+}
+
+func cmdFetch(args []string) error {
+	fs := flag.NewFlagSet("fetch", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	apiKey := os.Getenv("YOUTUBE_API_KEY")
+	handle := os.Getenv("CHANNEL_HANDLE")
+	if apiKey == "" || handle == "" {
+		return fmt.Errorf("YOUTUBE_API_KEY and CHANNEL_HANDLE must be set in .env")
+	}
+	return runFetch(apiKey, handle)
+}
+
+func cmdFetchAnalytics(args []string) error {
+	fs := flag.NewFlagSet("fetch-analytics", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return runFetchAnalytics("data/videos.json")
+}
+
+func cmdAnalyze(args []string) error {
+	fs := flag.NewFlagSet("analyze", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	diffPath := fs.String("diff", "", "path to a prior videos.json snapshot for delta report")
+	comparePeriods := fs.String("compare-periods", "", "two ranges YYYY-MM-DD..YYYY-MM-DD YYYY-MM-DD..YYYY-MM-DD")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	if *comparePeriods != "" {
+		return runComparePeriods("data/videos.json", *comparePeriods, fs.Args())
+	}
+	if *diffPath != "" {
+		return runDiff("data/videos.json", *diffPath, filter)
+	}
+	return runAnalyze("data/videos.json", filter)
+}
+
+func cmdDashboard(args []string) error {
+	fs := flag.NewFlagSet("dashboard", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runDashboard("data/videos.json", "data/dashboard.html", filter)
+}
+
+func cmdFindDuplicates(args []string) error {
+	fs := flag.NewFlagSet("find-duplicates", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	durTol := fs.Int("duration-tolerance", 10, "max duration difference in seconds for a pair to count as duplicate")
+	timeWindow := fs.Duration("time-window", 5*time.Minute, "max publish-time gap for a pair to count as duplicate")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runFindDuplicates("data/videos.json", filter, *durTol, *timeWindow)
+}
+
+func cmdDataQuality(args []string) error {
+	fs := flag.NewFlagSet("data-quality", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runDataQuality("data/videos.json", filter)
+}
+
+func cmdTitles(args []string) error {
+	fs := flag.NewFlagSet("titles", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	top := fs.Int("top", 10, "how many top titles to sample")
+	by := fs.String("by", "views", "sort metric: views|subs|retention|revenue")
+	minViews := fs.Int64("min-views", 0, "minimum view count for retention ranking")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runTitles("data/videos.json", filter, *top, *by, *minViews)
+}
+
+func cmdVideo(args []string) error {
+	fs := flag.NewFlagSet("video", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 {
+		return fmt.Errorf("video requires a YouTube video ID argument")
+	}
+	return runVideo("data/videos.json", fs.Arg(0))
+}
+
+func cmdExport(args []string) error {
+	fs := flag.NewFlagSet("export", flag.ExitOnError)
+	ff := addFilterFlags(fs)
+	format := fs.String("format", "csv", "csv|tsv")
+	output := fs.String("output", "", "path to write (default: stdout)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
+	return runExport("data/videos.json", filter, *format, *output)
 }

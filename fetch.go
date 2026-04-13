@@ -130,12 +130,23 @@ func runFetch(apiKey, channelHandle string) error {
 	if err != nil {
 		return fmt.Errorf("creating output file: %w", err)
 	}
-	defer f.Close()
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(data); err != nil {
 		return fmt.Errorf("encoding JSON: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("closing output file: %w", err)
+	}
+
+	if snapPath, err := snapshotVideosJSON("data/videos.json"); err != nil {
+		fmt.Fprintf(os.Stderr, "  (warning: snapshot failed: %v)\n", err)
+	} else {
+		fmt.Printf("  Snapshot saved: %s\n", snapPath)
+		if err := pruneSnapshots(snapshotKeep); err != nil {
+			fmt.Fprintf(os.Stderr, "  (warning: snapshot prune failed: %v)\n", err)
+		}
 	}
 
 	shorts := countByType(videos, "short")

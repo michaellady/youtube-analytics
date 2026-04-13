@@ -11,14 +11,21 @@ import (
 	"time"
 )
 
-func runDashboard(dataPath, outputPath string) error {
+func runDashboard(dataPath, outputPath string, filter VideoFilter) error {
 	data, err := loadData(dataPath)
 	if err != nil {
 		return err
 	}
 
+	if !filter.IsZero() {
+		before := len(data.Videos)
+		data.Videos = filter.Apply(data.Videos)
+		fmt.Printf("Filter %s: %d of %d videos.\n", filter.Describe(), len(data.Videos), before)
+	}
+
 	result := analyze(data)
 	dashData := buildDashboardData(data, result)
+	dashData.FilterDescription = filter.Describe()
 
 	f, err := os.Create(outputPath)
 	if err != nil {
@@ -82,6 +89,8 @@ type DashboardData struct {
 	TopRetentionVideos []DashVideo
 	SubsJSON           template.JS
 	TopSubVideos       []DashVideo
+
+	FilterDescription string
 }
 
 type DashStats struct {
@@ -434,7 +443,7 @@ const dashboardHTML = `<!DOCTYPE html>
 <body>
 <div class="header">
   <h1>{{.ChannelTitle}} Analytics Dashboard</h1>
-  <div class="subtitle">Generated {{.GeneratedAt}} | Data from YouTube Data API v3</div>
+  <div class="subtitle">Generated {{.GeneratedAt}} | Data from YouTube Data API v3{{if .FilterDescription}} | Filter: {{.FilterDescription}}{{end}}</div>
 </div>
 
 <div class="container">

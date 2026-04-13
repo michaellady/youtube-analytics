@@ -12,10 +12,16 @@ import (
 	"unicode"
 )
 
-func runAnalyze(dataPath string) error {
+func runAnalyze(dataPath string, filter VideoFilter) error {
 	data, err := loadData(dataPath)
 	if err != nil {
 		return err
+	}
+
+	if !filter.IsZero() {
+		before := len(data.Videos)
+		data.Videos = filter.Apply(data.Videos)
+		fmt.Printf("Filter %s: %d of %d videos.\n\n", filter.Describe(), len(data.Videos), before)
 	}
 
 	result := analyze(data)
