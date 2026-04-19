@@ -5,3 +5,5 @@ node_modules/
 __pycache__/
 *.pyc
 data/
+.gstack/
+enterprise_vibe_code_growth_priorities.md
