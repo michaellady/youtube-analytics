@@ -143,7 +143,7 @@ func runDiff(currentPath, priorPath string, filter VideoFilter) error {
 	return nil
 }
 
-func runComparePeriods(dataPath, spec string, extra []string) error {
+func runComparePeriods(dataPath, spec string, extra []string, outer VideoFilter) error {
 	data, err := loadData(dataPath)
 	if err != nil {
 		return err
@@ -155,7 +155,13 @@ func runComparePeriods(dataPath, spec string, extra []string) error {
 
 	var all []*periodStats
 	for _, r := range ranges {
-		p := &periodStats{label: r.label, filter: r.filter}
+		// Range's date window overrides any outer Since/Until; everything else
+		// (cohorts, types, duration bounds, exclude IDs) is inherited so users
+		// can scope a comparison with `--cohort` or `--type` flags.
+		merged := outer
+		merged.Since = r.filter.Since
+		merged.Until = r.filter.Until
+		p := &periodStats{label: r.label, filter: merged}
 		p.videos = p.filter.Apply(data.Videos)
 		fake := &ChannelData{
 			ChannelID: data.ChannelID, ChannelTitle: data.ChannelTitle,

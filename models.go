@@ -163,20 +163,23 @@ type RevenueBucket struct {
 	RPM            float64
 }
 
-// VideoFilter restricts a []Video slice by published date, video type, duration, or id.
+// VideoFilter restricts a []Video slice by published date, video type, duration, id, or cohort.
 // A zero-valued field means "no bound" for that dimension.
 type VideoFilter struct {
-	Since      time.Time
-	Until      time.Time
-	Types      []string
-	DurMinSec  int
-	DurMaxSec  int
-	ExcludeIDs map[string]bool
+	Since             time.Time
+	Until             time.Time
+	Types             []string
+	DurMinSec         int
+	DurMaxSec         int
+	ExcludeIDs        map[string]bool
+	Cohorts           []string            // filter videos to ones in any of these cohorts
+	CohortAssignments map[string][]string // videoID -> cohort IDs (loaded from data/cohort_assignments.json)
 }
 
 func (f VideoFilter) IsZero() bool {
 	return f.Since.IsZero() && f.Until.IsZero() && len(f.Types) == 0 &&
-		f.DurMinSec == 0 && f.DurMaxSec == 0 && len(f.ExcludeIDs) == 0
+		f.DurMinSec == 0 && f.DurMaxSec == 0 && len(f.ExcludeIDs) == 0 &&
+		len(f.Cohorts) == 0
 }
 
 func (f VideoFilter) Apply(videos []Video) []Video {
@@ -186,6 +189,10 @@ func (f VideoFilter) Apply(videos []Video) []Video {
 	typeSet := map[string]bool{}
 	for _, t := range f.Types {
 		typeSet[t] = true
+	}
+	cohortSet := map[string]bool{}
+	for _, c := range f.Cohorts {
+		cohortSet[c] = true
 	}
 	out := make([]Video, 0, len(videos))
 	for _, v := range videos {
@@ -206,6 +213,18 @@ func (f VideoFilter) Apply(videos []Video) []Video {
 		}
 		if f.DurMaxSec > 0 && v.DurationSeconds > f.DurMaxSec {
 			continue
+		}
+		if len(cohortSet) > 0 {
+			matched := false
+			for _, assigned := range f.CohortAssignments[v.ID] {
+				if cohortSet[assigned] {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 		out = append(out, v)
 	}
@@ -239,6 +258,9 @@ func (f VideoFilter) Describe() string {
 	}
 	if len(f.ExcludeIDs) > 0 {
 		parts = append(parts, fmt.Sprintf("excluded=%d", len(f.ExcludeIDs)))
+	}
+	if len(f.Cohorts) > 0 {
+		parts = append(parts, "cohort="+strings.Join(f.Cohorts, "|"))
 	}
 	return "(" + strings.Join(parts, ", ") + ")"
 }

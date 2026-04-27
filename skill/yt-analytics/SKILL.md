@@ -27,6 +27,8 @@ Run from the project directory:
 | `go run . titles` | Title pattern analysis with keyword lift | instant |
 | `go run . video <id>` | Deep-dive on a single video | instant |
 | `go run . export` | Flat CSV/TSV export | instant |
+| `go run . cohort <subcmd>` | Local cohort tagging — list/show/assign/auto/report | instant |
+| `go run . insights <subcmd>` | Hypothesis ledger — list/pending/grade/new | instant |
 
 Analytics window for `fetch-analytics` is fixed at 2025-12-01 → today in `fetch_analytics.go`. Change that file if you need a different baseline.
 
@@ -41,6 +43,7 @@ Analytics window for `fetch-analytics` is fixed at 2025-12-01 → today in `fetc
 | `--type <short\|long-form\|live>` | Video type (repeatable) |
 | `--duration-min N` / `--duration-max N` | Duration bounds in seconds |
 | `--exclude <ID>` | Skip specific video (repeatable) |
+| `--cohort <id>` | Filter to a cohort id from `data/cohorts.yaml` (repeatable) |
 
 ## Typical Workflows
 
@@ -55,6 +58,69 @@ go run . analyze > data/analytics_report.md
 **Report only** (cached data): `go run . analyze`
 
 **Dashboard**: `go run . dashboard` (add filter flags for a scoped view)
+
+## Closed-Loop Weekly Review (cohorts + hypotheses)
+
+The weekly review is a **skill workflow**, not a single command. The CLI handles transport (data, file IO, deterministic rules); the model handles cognition (grading, hypothesis generation). This split is deliberate — see `docs/primitive-test.md`.
+
+Cohorts are named groups of videos defined in `data/cohorts.yaml` with optional auto-match rules (regex on title/description, video_type, duration, publish date). Run `go run . cohort auto` to (re)derive assignments after `fetch`. Manual-only cohorts (no rules) are managed via `cohort assign/unassign`.
+
+Insights live in `data/insights/<YYYY-MM-DD>.md` with YAML frontmatter:
+```yaml
+---
+date: 2026-04-26
+hypotheses:
+  - id: h-2026-04-26-1
+    cohort: gastown-series
+    prediction: Title variation will lift retention on next 3 long-forms
+    evidence_video_ids: [abc, def, ghi]
+    metric: retention
+    direction: up
+    evaluate_after: 2026-05-10
+    outcome: ""
+    verdict: ""
+---
+```
+
+### Weekly review workflow
+
+1. **Refresh data** (transport):
+   ```bash
+   go run . fetch && go run . fetch-analytics
+   go run . cohort auto
+   ```
+
+2. **Pull the numbers the model needs** (transport):
+   ```bash
+   go run . analyze --compare-periods <prev-week> <this-week>
+   go run . cohort report --since <last-monday>
+   go run . insights pending          # past-due hypotheses + current metrics
+   ```
+
+3. **GRADE pending hypotheses** (cognition — model judgment, NOT Go):
+   For each hypothesis emitted by `insights pending`:
+   - Read its prediction + the cited videos' current metrics (already in the output)
+   - Decide verdict: `confirm` / `refute` / `inconclusive` — explain reasoning
+   - Persist (flags must precede the hypothesis-id positional argument):
+     ```bash
+     go run . insights grade --verdict <v> --outcome "<what actually happened>" <id>
+     ```
+
+4. **Report to the user** with:
+   - Cohort movement first (lead here, not raw totals)
+   - WoW deltas
+   - Verdicts on hypotheses graded this cycle
+   - 1-3 NEW hypotheses for next week
+
+5. **Persist the new hypotheses** (cognition writing transport-readable files):
+   ```bash
+   go run . insights new <this-monday>     # creates the file
+   ```
+   Then edit the file directly to add hypothesis entries with frontmatter (id, cohort, prediction, evidence_video_ids, metric, direction, evaluate_after).
+
+### Why this isn't a single `review` command
+
+Mechanical "did metric X move by N?" grading and auto-generated hypothesis stubs would fail the Bitter Lesson — a smarter model produces better verdicts and better hypotheses from the prompt than from a hardcoded comparator. Go shuttles the data; the model brings the judgment.
 
 ## "Since we last ran it" Pattern
 
@@ -154,17 +220,22 @@ Match the user's request to the command:
 | "duplicate check" | `find-duplicates` |
 | "which format works" | `analyze` (look at subs/1K views by type) |
 | "compare X period to Y" | `analyze --compare-periods A..B C..D` |
+| "how is the X cohort doing" | `cohort report` or `analyze --cohort X` |
+| "weekly review" / "closed loop" | run the Closed-Loop Weekly Review workflow above |
+| "what did we predict last week" | `insights pending` then grade verdicts |
 | "tell me about this video" | `video <id>` |
 | "dump to spreadsheet" | `export --format csv --output path.csv` |
 
 ## Reporting Conventions
 
 When presenting analytics to the user:
+- **Lead with cohort movement** when cohorts are defined — that's the unit of intentional decision-making, not raw channel totals
 - **Lead with the delta** if comparing to a previous run (new videos, new subs, new revenue)
 - **Subs per 1K views** is the cleanest conversion metric — live streams dominate (~17) vs shorts (~0.7)
 - **Retention + views together** — high views with low retention is a red flag, not a win
 - **Flag data-quality issues proactively** (null tags, templated descriptions, duplicate uploads)
 - **Don't rank by views alone** when the user is deciding what content to make — weight by subs gained and retention
+- **Hypothesis grading is your judgment** — `insights pending` gives you the numbers; you give the verdict
 
 ## Common Pitfalls
 

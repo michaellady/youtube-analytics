@@ -45,6 +45,10 @@ func main() {
 		err = cmdSuggestTags(args)
 	case "update-tags":
 		err = cmdUpdateTags(args)
+	case "cohort":
+		err = cmdCohort(args)
+	case "insights":
+		err = cmdInsights(args)
 	case "-h", "--help", "help":
 		printUsage()
 		return
@@ -75,6 +79,8 @@ func printUsage() {
 	fmt.Println("  export            Export video data as CSV/TSV")
 	fmt.Println("  suggest-tags      Generate data/tags.json with rule-based tag recommendations")
 	fmt.Println("  update-tags       Preview or push tag updates to YouTube (dry-run default)")
+	fmt.Println("  cohort <subcmd>   Local cohort tagging: list|show|assign|unassign|auto|report")
+	fmt.Println("  insights <subcmd> Hypothesis ledger: list|pending|grade|new")
 	fmt.Println()
 	fmt.Println("Common flags (analyze, dashboard, export):")
 	fmt.Println("  --since YYYY-MM-DD        Filter videos published on/after this date")
@@ -83,6 +89,7 @@ func printUsage() {
 	fmt.Println("  --duration-min N          Minimum duration in seconds")
 	fmt.Println("  --duration-max N          Maximum duration in seconds")
 	fmt.Println("  --exclude <ID>            Exclude a specific video ID (repeatable)")
+	fmt.Println("  --cohort <id>             Filter to a cohort id from data/cohorts.yaml (repeatable)")
 	fmt.Println()
 	fmt.Println("Analyze-only:")
 	fmt.Println("  --diff <snapshot.json>    Delta report vs. a prior videos.json")
@@ -98,10 +105,11 @@ func (s *stringSliceFlag) Set(v string) error { *s = append(*s, v); return nil }
 // filterFlags binds filter-related flags onto a FlagSet and returns a resolver
 // that produces a VideoFilter after fs.Parse has run.
 type filterFlags struct {
-	since, until           string
-	types                  stringSliceFlag
-	durMin, durMax         int
-	excludes               stringSliceFlag
+	since, until   string
+	types          stringSliceFlag
+	durMin, durMax int
+	excludes       stringSliceFlag
+	cohorts        stringSliceFlag
 }
 
 func addFilterFlags(fs *flag.FlagSet) *filterFlags {
@@ -112,6 +120,7 @@ func addFilterFlags(fs *flag.FlagSet) *filterFlags {
 	fs.IntVar(&ff.durMin, "duration-min", 0, "minimum duration in seconds")
 	fs.IntVar(&ff.durMax, "duration-max", 0, "maximum duration in seconds")
 	fs.Var(&ff.excludes, "exclude", "exclude a specific video ID (repeatable)")
+	fs.Var(&ff.cohorts, "cohort", "filter to a cohort id from data/cohorts.yaml (repeatable)")
 	return ff
 }
 
@@ -146,6 +155,14 @@ func (ff *filterFlags) build() (VideoFilter, error) {
 		for _, id := range ff.excludes {
 			f.ExcludeIDs[id] = true
 		}
+	}
+	if len(ff.cohorts) > 0 {
+		f.Cohorts = []string(ff.cohorts)
+		assignments, err := loadAssignments(cohortAssignmentsPath)
+		if err != nil {
+			return f, fmt.Errorf("--cohort: %w", err)
+		}
+		f.CohortAssignments = assignments
 	}
 	return f, nil
 }
@@ -184,7 +201,7 @@ func cmdAnalyze(args []string) error {
 		return err
 	}
 	if *comparePeriods != "" {
-		return runComparePeriods("data/videos.json", *comparePeriods, fs.Args())
+		return runComparePeriods("data/videos.json", *comparePeriods, fs.Args(), filter)
 	}
 	if *diffPath != "" {
 		return runDiff("data/videos.json", *diffPath, filter)
