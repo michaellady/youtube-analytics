@@ -20,6 +20,8 @@ Run from the project directory:
 |---------|-------------|----------|
 | `go run . fetch` | Pull video metadata from YouTube Data API + auto-snapshot | 1-2 min |
 | `go run . fetch-analytics` | Pull watch time, retention, subs, revenue (OAuth2) | 2-5 min |
+| `go run . fetch-analytics --all` | Above + per-day, traffic-source, sub-status breakdowns | 5-10 min |
+| `go run . fetch-comments` | Pull top-level comments per video → `data/comments.json` | 2-5 min |
 | `go run . analyze` | Print terminal report | instant |
 | `go run . dashboard` | Generate `data/dashboard.html` and open in browser | instant |
 | `go run . find-duplicates` | Detect near-duplicate uploads | instant |
@@ -31,6 +33,36 @@ Run from the project directory:
 | `go run . insights <subcmd>` | Hypothesis ledger — list/pending/grade/new | instant |
 
 Analytics window for `fetch-analytics` is fixed at 2025-12-01 → today in `fetch_analytics.go`. Change that file if you need a different baseline.
+
+### fetch-analytics dimensional flags
+
+The base `fetch-analytics` only pulls aggregate-over-window metrics. The flags below add additive dimensional data — aggregate fields stay populated, the new fields just go alongside them:
+
+| Flag | Adds to each video | Useful for |
+|------|---------------------|------------|
+| `--daily` | `daily_metrics[]` — date, views, watch_min, retention, subs | Date-correlation hypotheses ("did newsletter mention spike views on 2026-04-23?") |
+| `--traffic-sources` | `traffic_sources{}` — keyed by `YT_SEARCH`, `RELATED_VIDEO`, `SUBSCRIBER`, `EXT_URL`, `BROWSE`, `NOTIFICATION`, etc. | "Did the format-fatigue collapse come from SUBSCRIBER traffic drying up, or RELATED_VIDEO suppression?" |
+| `--sub-status` | `sub_status_metrics{SUBSCRIBED, UNSUBSCRIBED}` | Cleaner conversion signal — `subs/1K` over `UNSUBSCRIBED.views` is the actual conversion target |
+| `--all` | All three at once | Default for closed-loop weekly review |
+
+Each flag adds one extra batched API call per fetch. Daily uses a smaller batch size (50 vs 200) because rows-per-video balloon with the day dimension.
+
+### fetch-comments
+
+`fetch-comments` writes top-level comments for filtered videos to `data/comments.json`, keyed by video ID. Re-running merges by ID — videos NOT in the current run keep their previously-fetched comments.
+
+```bash
+# All videos (uses the full filter set — flags must precede positional)
+go run . fetch-comments --limit 20
+
+# Just past-week long-forms in a cohort
+go run . fetch-comments --since 2026-04-19 --type long-form --cohort gastown-series --limit 10
+
+# Time-ordered (most recent first) instead of relevance
+go run . fetch-comments --order time --limit 5
+```
+
+Comments are qualitative signal. Use them when grading hypotheses: read the model the top-3 comments per cited video and let it spot themes (confusion, requests, push-back). Don't try to classify sentiment in Go — that's cognition, belongs in the prompt.
 
 ## Filter Flags
 
@@ -88,9 +120,12 @@ hypotheses:
 
 1. **Refresh data** (transport):
    ```bash
-   go run . fetch && go run . fetch-analytics
+   go run . fetch && go run . fetch-analytics --all
    go run . cohort auto
+   # Optional: fetch fresh comments for any cohort under active hypothesis
+   go run . fetch-comments --since <last-monday> --limit 10
    ```
+   Use `--all` so `insights pending` can surface the per-day trajectory, traffic sources, and sub-status split for cited videos — without those dimensions you're stuck with the same aggregate the prior cycle had.
 
 2. **Pull the numbers the model needs** (transport):
    ```bash
@@ -193,6 +228,27 @@ go run . export --format csv --since 2026-04-01 --output recent.csv
 **One-video deep-dive:**
 ```bash
 go run . video Rn0Oc9U0AOE
+```
+
+**Did newsletter mention drive views on a specific day?** (requires `fetch-analytics --daily` first):
+```bash
+# Filter daily_metrics[] for the newsletter send date
+jq '.videos[] | select(.video_type=="long-form") | {id, title, day: (.daily_metrics[]? | select(.date == "2026-04-23"))}' data/videos.json | head -40
+```
+
+**Conversion target only (UNSUBSCRIBED viewers):** subs/1K is contaminated by SUBSCRIBED viewers who can't sub again. After `fetch-analytics --sub-status`:
+```bash
+jq -r '.videos[] | select(.sub_status_metrics.UNSUBSCRIBED.views > 100) | [
+  ((.subscribers_gained // 0) / .sub_status_metrics.UNSUBSCRIBED.views * 1000),
+  .sub_status_metrics.UNSUBSCRIBED.views,
+  .title
+] | @tsv' data/videos.json | sort -rn | head -10
+```
+
+**Where did views come from?** (after `fetch-analytics --traffic-sources`):
+```bash
+go run . video <id>     # video deep-dive doesn't yet surface traffic sources, so:
+jq '.videos[] | select(.id=="<video-id>") | .traffic_sources' data/videos.json
 ```
 
 ## Escape Hatch: jq on `data/videos.json`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"text/tabwriter"
 	"time"
 )
@@ -127,6 +128,27 @@ func runInsightsPending(args []string) error {
 					truncate(v.Title, 50))
 			}
 			w.Flush()
+
+			// Surface dimensional context when present. Pure transport — the
+			// model decides what these numbers mean.
+			for _, vid := range h.EvidenceVideoIDs {
+				v, ok := byID[vid]
+				if !ok {
+					continue
+				}
+				if len(v.DailyMetrics) > 0 {
+					fmt.Printf("    %s — last-7-days view trajectory:\n", vid)
+					printDailyTail(v.DailyMetrics, 7)
+				}
+				if len(v.TrafficSources) > 0 {
+					fmt.Printf("    %s — top traffic sources:\n", vid)
+					printTopTrafficSources(v.TrafficSources, 3)
+				}
+				if len(v.SubStatusMetrics) > 0 {
+					fmt.Printf("    %s — subscriber-status split:\n", vid)
+					printSubStatus(v.SubStatusMetrics)
+				}
+			}
 		}
 		fmt.Println()
 	}
@@ -196,6 +218,64 @@ func runInsightsNew(args []string) error {
 	}
 	fmt.Printf("Created %s — edit it to add hypotheses with frontmatter.\n", path)
 	return nil
+}
+
+// printDailyTail prints the most recent n DailyMetric rows in chronological
+// order. The API returns rows in arbitrary order; we sort by Date string
+// (YYYY-MM-DD sorts lexicographically as chronologically) and take the tail.
+func printDailyTail(series []DailyMetric, n int) {
+	sorted := make([]DailyMetric, len(series))
+	copy(sorted, series)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Date < sorted[j].Date })
+	start := 0
+	if len(sorted) > n {
+		start = len(sorted) - n
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "      \tDATE\tVIEWS\tWATCH_MIN\tRET%\tSUBS")
+	for _, d := range sorted[start:] {
+		fmt.Fprintf(w, "      \t%s\t%d\t%.0f\t%.1f\t%+d\n",
+			d.Date, d.Views, d.EstimatedMinutes, d.AvgRetention, d.SubscribersGained-d.SubscribersLost)
+	}
+	w.Flush()
+}
+
+// printTopTrafficSources prints the n traffic-source buckets with the most
+// views, sorted descending.
+func printTopTrafficSources(m map[string]TrafficSourceMetric, n int) {
+	type kv struct {
+		k string
+		v TrafficSourceMetric
+	}
+	all := make([]kv, 0, len(m))
+	for k, v := range m {
+		all = append(all, kv{k, v})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].v.Views > all[j].v.Views })
+	limit := n
+	if len(all) < limit {
+		limit = len(all)
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "      \tSOURCE\tVIEWS\tWATCH_MIN")
+	for _, e := range all[:limit] {
+		fmt.Fprintf(w, "      \t%s\t%d\t%.0f\n", e.k, e.v.Views, e.v.WatchMin)
+	}
+	w.Flush()
+}
+
+// printSubStatus emits the SUBSCRIBED vs UNSUBSCRIBED split (always two rows).
+func printSubStatus(m map[string]TrafficSourceMetric) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "      \tSTATUS\tVIEWS\tWATCH_MIN")
+	for _, status := range []string{"SUBSCRIBED", "UNSUBSCRIBED"} {
+		v, ok := m[status]
+		if !ok {
+			continue
+		}
+		fmt.Fprintf(w, "      \t%s\t%d\t%.0f\n", status, v.Views, v.WatchMin)
+	}
+	w.Flush()
 }
 
 // mostRecentMonday returns the most recent Monday on or before now.

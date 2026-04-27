@@ -33,6 +33,33 @@ type Video struct {
 	AdImpressions    int64   `json:"ad_impressions,omitempty"`
 	CPM              float64 `json:"cpm,omitempty"`                // cost per mille
 	MonetizedPlaybacks int64 `json:"monetized_playbacks,omitempty"`
+
+	// Optional dimensional breakdowns. Only populated when the matching
+	// fetch-analytics flag is passed. Aggregate fields above stay populated
+	// regardless — these are additive context, not replacements.
+	DailyMetrics     []DailyMetric                  `json:"daily_metrics,omitempty"`
+	TrafficSources   map[string]TrafficSourceMetric `json:"traffic_sources,omitempty"`   // key: insightTrafficSourceType
+	SubStatusMetrics map[string]TrafficSourceMetric `json:"sub_status_metrics,omitempty"` // keys: SUBSCRIBED|UNSUBSCRIBED
+}
+
+// DailyMetric is one row from a `Dimensions("video,day")` Analytics query.
+// Optional fields (retention, revenue) populate only when the channel has
+// monetization scope and the underlying response includes them.
+type DailyMetric struct {
+	Date              string  `json:"date"` // YYYY-MM-DD
+	Views             int64   `json:"views"`
+	EstimatedMinutes  float64 `json:"estimated_minutes"`
+	AvgRetention      float64 `json:"avg_retention,omitempty"`
+	SubscribersGained int64   `json:"subs_gained,omitempty"`
+	SubscribersLost   int64   `json:"subs_lost,omitempty"`
+	Revenue           float64 `json:"revenue,omitempty"`
+}
+
+// TrafficSourceMetric is reused for both traffic-source and sub-status
+// breakdowns since both shapes are "views + watch_min keyed by category".
+type TrafficSourceMetric struct {
+	Views    int64   `json:"views"`
+	WatchMin float64 `json:"watch_min,omitempty"`
 }
 
 // ChannelData is the top-level structure saved to data/videos.json.

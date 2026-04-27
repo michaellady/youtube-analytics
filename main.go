@@ -27,6 +27,8 @@ func main() {
 		err = cmdFetch(args)
 	case "fetch-analytics":
 		err = cmdFetchAnalytics(args)
+	case "fetch-comments":
+		err = cmdFetchComments(args)
 	case "analyze":
 		err = cmdAnalyze(args)
 	case "dashboard":
@@ -70,6 +72,8 @@ func printUsage() {
 	fmt.Println("Commands:")
 	fmt.Println("  fetch             Fetch all video data from YouTube API → data/videos.json")
 	fmt.Println("  fetch-analytics   Fetch watch time data via OAuth2 → merge into data/videos.json")
+	fmt.Println("                    Flags: --daily, --traffic-sources, --sub-status, --all")
+	fmt.Println("  fetch-comments    Fetch top-level comments per video → data/comments.json")
 	fmt.Println("  analyze           Analyze data and print terminal report")
 	fmt.Println("  dashboard         Generate interactive HTML dashboard → data/dashboard.html")
 	fmt.Println("  find-duplicates   Detect near-duplicate uploads")
@@ -182,10 +186,20 @@ func cmdFetch(args []string) error {
 
 func cmdFetchAnalytics(args []string) error {
 	fs := flag.NewFlagSet("fetch-analytics", flag.ExitOnError)
+	daily := fs.Bool("daily", false, "fetch per-day breakdown into Video.daily_metrics")
+	traffic := fs.Bool("traffic-sources", false, "fetch per-source view share into Video.traffic_sources")
+	subStatus := fs.Bool("sub-status", false, "fetch SUBSCRIBED/UNSUBSCRIBED split into Video.sub_status_metrics")
+	all := fs.Bool("all", false, "shorthand for --daily --traffic-sources --sub-status")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	return runFetchAnalytics("data/videos.json")
+	opts := AnalyticsOptions{Daily: *daily, TrafficSources: *traffic, SubStatus: *subStatus}
+	if *all {
+		opts.Daily = true
+		opts.TrafficSources = true
+		opts.SubStatus = true
+	}
+	return runFetchAnalytics("data/videos.json", opts)
 }
 
 func cmdAnalyze(args []string) error {
