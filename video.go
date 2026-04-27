@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 func runVideo(dataPath, id string) error {
@@ -99,6 +100,29 @@ func runVideo(dataPath, id string) error {
 		fmt.Println()
 	}
 
+	// Comments surface qualitative signal. The model interprets sentiment;
+	// Go just shuttles the text in like-rank order.
+	if comments, fetchedAt := videoCommentsFor(v.ID); len(comments) > 0 {
+		fmt.Println("── Top Comments ──────────────────────────────────────────")
+		fmt.Printf("  (fetched %s; %d total)\n", fetchedAt.Format("2006-01-02"), len(comments))
+		limit := 5
+		if len(comments) < limit {
+			limit = len(comments)
+		}
+		for _, c := range comments[:limit] {
+			meta := fmt.Sprintf("%s · 👍 %d · %s", c.AuthorName, c.LikeCount, c.PublishedAt.Format("2006-01-02"))
+			if c.ReplyCount > 0 {
+				meta += fmt.Sprintf(" · 💬 %d replies", c.ReplyCount)
+			}
+			fmt.Printf("  %s\n", meta)
+			// Indent each line of the comment body so multi-line text is readable.
+			for _, line := range strings.Split(strings.TrimSpace(c.Text), "\n") {
+				fmt.Printf("    %s\n", line)
+			}
+			fmt.Println()
+		}
+	}
+
 	fmt.Println("── Tags ──────────────────────────────────────────────────")
 	if len(v.Tags) == 0 {
 		fmt.Println("  (no tags)")
@@ -160,6 +184,21 @@ func printDailyTrajectory(series []DailyMetric, n int) {
 			d.Date, d.Views, d.EstimatedMinutes, d.AvgRetention,
 			d.SubscribersGained-d.SubscribersLost)
 	}
+}
+
+// videoCommentsFor reads data/comments.json and returns the comments for the
+// given video plus the per-video fetched_at timestamp. Returns (nil, zero) if
+// the file is missing, unparseable, or has no entry for the video.
+func videoCommentsFor(videoID string) ([]Comment, time.Time) {
+	cf, err := loadComments(commentsJSONPath)
+	if err != nil {
+		return nil, time.Time{}
+	}
+	vc, ok := cf.Videos[videoID]
+	if !ok {
+		return nil, time.Time{}
+	}
+	return vc.Comments, vc.FetchedAt
 }
 
 // videoCohorts returns sorted cohort IDs assigned to a video, or nil if none.
