@@ -92,21 +92,22 @@ Then:
 
 1. **Check current tabs** with `tabs_context_mcp` (with `createIfEmpty: true` if no MCP tab group exists yet). Reuse if Studio is already open on this video.
 2. **Open Studio** with `tabs_create_mcp` if needed, then `navigate` to `https://studio.youtube.com/video/<id>/edit` — the edit page is the right starting point. Test and Compare is NOT at top-level URLs like `/abtesting` or channel-level `/test_and_compare` (both 404). Don't waste turns trying.
-3. **Find the Test and Compare entry point.** As of April 2026, Studio surfaces this via the Analytics tab → there's a "Test & compare" or similar CTA. UI shifts; navigate by reading the page (`get_page_text`) and clicking by text rather than relying on stable selectors.
-4. **Create a new test:**
-   - Test type: **Title** (this skill defaults to title; user can specify `--thumbnail` later)
-   - Add the 3 alternative titles. The original is already a variant by default — don't double-add it.
-   - Confirm the test will run for the YT-default duration (~2 weeks).
-5. **Submit** and **screenshot** the running test for the experiment record.
+3. **Find the native A/B Testing button.** It lives directly under the Title field on the edit page — labeled "A/B Testing" with a panel/screen icon. **NOT to be confused with TubeBuddy's "A/B Testing" link** (orange "tb" logo) which is the third-party rotation tool. They sit close together on the page. Use `find` with this query to disambiguate: `A/B Testing button under the title field, not a link to tubebuddy`. Available on brand-new videos (verified 2026-04-27 on a 10-hour-old video with 22 views — earlier assumptions about an impressions threshold were wrong).
 
-**Eligibility caveat (real issue observed 2026-04-27).** Native Test and Compare appears to require an impressions baseline before Studio surfaces the affordance. For a video <24 hours old with <100 views, the option may not appear anywhere — and that's NOT a navigation failure on your part, it's YouTube gating the feature. If you've checked the edit page, the analytics → reach tab, and any "..." menus and still can't find a native "Test and compare" entry:
+4. **Open the dialog and pick the test type.** Click the button — a modal opens with three tabs: "Title only", "Thumbnail only", "Title and thumbnail". Default to "Title only" unless the user requested otherwise.
 
-- **DO NOT click TubeBuddy's "A/B Testing" button as a substitute.** That's a different feature (third-party sequential rotation, worse experimental design). The user explicitly chose native testing.
-- Save the candidate titles to `data/launch-experiments/<id>.yaml` with `status: pending-eligibility` and a `notes` field explaining why and when to retry (typically 3-7 days post-publish for substantive long-forms on this channel — when daily impressions cross ~1K).
-- Tell the user clearly: "Native Test and Compare doesn't appear available for this video yet — likely needs more impressions. I've saved the candidate titles to <path>; re-run `/yt-ab <id>` in a few days."
-- Suggest checking `~/Library/Logs/yt-launch-watch/<id>/` daily logs for impressions growth.
+5. **Fill the variant fields.** The dialog shows three input fields:
+   - Title 1 is pre-filled with the current title (the original) — don't touch it.
+   - Title 2 is required.
+   - Title 3 is optional but recommended (3 variants > 2 for statistical power; ask the user which alternative(s) they want).
 
-**Don't fake success.** The skill's value is in the candidate generation + the experiment record. The button-click is the small part; saving with `status: pending-eligibility` is a legitimate outcome.
+   The fields are contenteditable divs (NOT standard `<input>`/`<textarea>`), so `form_input` errors with `Element type "DIV" is not a supported form input`. Use `left_click` on the field's ref, then `computer` action `type` with the variant text. After all required fields are filled, the dialog footer flips from "2nd title is required" to a green checkmark + "Title test ready" — that's the gate to the Set test button.
+
+6. **Submit the test.** Click "Set test" (footer of the dialog). The dialog closes and a toast appears: `The test is ready and will start once you save your changes`.
+
+7. **Save the video.** Click "Save" in the top-right (it goes from disabled-grey to filled-dark when there are unsaved changes). A "Changes saved" toast confirms; both Save and Undo go back to disabled. The test is now LIVE.
+
+8. **Screenshot** the post-save state for the experiment record. Don't fake success — if any step fails, surface clearly to the user.
 
 ### 6. Record the experiment
 
