@@ -4,8 +4,11 @@ youtube-analytics
 node_modules/
 __pycache__/
 *.pyc
-# Track authored config + ledger; ignore fetched/generated artifacts.
-data/*.json
+# Track authored config + ledger artifacts (cohorts.yaml, insights/*.md,
+# comments.json). Ignore fetched/generated bulk data and secrets.
+data/videos.json
+data/cohort_assignments.json
+data/tags.json
 data/snapshots/
 data/dashboard.html
 data/analytics_report*.md

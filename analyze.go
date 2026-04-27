@@ -715,7 +715,88 @@ func printReport(r *AnalysisResult, data *ChannelData) {
 		}
 	}
 
+	// Optional dimensional sections — only print when data is present.
+	// Pure transport: aggregate the per-video maps and emit the rollups.
+	printTrafficSourceMix(data.Videos)
+	printTopByUnsubscribedConversion(data.Videos)
+
 	fmt.Println("═══════════════════════════════════════════════════════════")
+}
+
+// printTrafficSourceMix rolls up traffic_sources across all filtered videos.
+// Only prints when at least one video has the data populated (i.e. user has
+// run `fetch-analytics --traffic-sources`).
+func printTrafficSourceMix(videos []Video) {
+	totals := map[string]int64{}
+	watch := map[string]float64{}
+	var grand int64
+	for _, v := range videos {
+		for source, m := range v.TrafficSources {
+			totals[source] += m.Views
+			watch[source] += m.WatchMin
+			grand += m.Views
+		}
+	}
+	if len(totals) == 0 {
+		return
+	}
+	fmt.Println("── Traffic Source Mix ─────────────────────────────────────")
+	type kv struct {
+		k string
+		v int64
+		w float64
+	}
+	all := make([]kv, 0, len(totals))
+	for k, v := range totals {
+		all = append(all, kv{k, v, watch[k]})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].v > all[j].v })
+	for _, e := range all {
+		share := 0.0
+		if grand > 0 {
+			share = float64(e.v) / float64(grand) * 100
+		}
+		fmt.Printf("  %-20s %s views (%.1f%%) — %.0f watch-min\n",
+			e.k, fmtNum(e.v), share, e.w)
+	}
+	fmt.Println()
+}
+
+// printTopByUnsubscribedConversion ranks videos by subs-per-1K against
+// UNSUBSCRIBED viewers (the actual conversion target). Only prints when at
+// least one video has sub_status_metrics populated.
+func printTopByUnsubscribedConversion(videos []Video) {
+	type entry struct {
+		v       Video
+		unsub   int64
+		ratePer int64 // basis: subs per 1K UNSUBSCRIBED views
+		rate    float64
+	}
+	var rows []entry
+	for _, v := range videos {
+		uns, ok := v.SubStatusMetrics["UNSUBSCRIBED"]
+		if !ok || uns.Views < 100 {
+			continue
+		}
+		rate := float64(v.SubscribersGained) / float64(uns.Views) * 1000
+		rows = append(rows, entry{v: v, unsub: uns.Views, rate: rate})
+	}
+	if len(rows) == 0 {
+		return
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].rate > rows[j].rate })
+	limit := 10
+	if len(rows) < limit {
+		limit = len(rows)
+	}
+	fmt.Println("── Top 10 by UNSUBSCRIBED Conversion (min 100 unsub views) ─")
+	fmt.Println("  (Subs / 1K UNSUBSCRIBED views — the actual conversion-target population)")
+	for i, e := range rows[:limit] {
+		fmt.Printf("  %2d. [%s] %s\n", i+1, e.v.VideoType, truncate(e.v.Title, 55))
+		fmt.Printf("      %.2f subs/1K  (subs +%d on %s unsub views)\n",
+			e.rate, e.v.SubscribersGained, fmtNum(e.unsub))
+	}
+	fmt.Println()
 }
 
 func printPerf(prefix string, p PeriodPerformance) {

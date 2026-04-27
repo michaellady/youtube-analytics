@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -60,6 +61,44 @@ func runVideo(dataPath, id string) error {
 		fmt.Println()
 	}
 
+	if len(v.SubStatusMetrics) > 0 {
+		fmt.Println("── Subscriber-Status Split ───────────────────────────────")
+		sub := v.SubStatusMetrics["SUBSCRIBED"]
+		uns := v.SubStatusMetrics["UNSUBSCRIBED"]
+		total := sub.Views + uns.Views
+		if total > 0 {
+			fmt.Printf("  SUBSCRIBED:    %s views (%.1f%%) — %.0f watch-min\n",
+				fmtNum(sub.Views), float64(sub.Views)/float64(total)*100, sub.WatchMin)
+			fmt.Printf("  UNSUBSCRIBED:  %s views (%.1f%%) — %.0f watch-min\n",
+				fmtNum(uns.Views), float64(uns.Views)/float64(total)*100, uns.WatchMin)
+		}
+		// Conversion against UNSUBSCRIBED is the meaningful subs/1K — SUBSCRIBED viewers can't sub again.
+		if uns.Views > 0 {
+			fmt.Printf("  Subs/1K UNSUBSCRIBED: %.2f (cleaner conversion signal than overall subs/1K)\n",
+				float64(v.SubscribersGained)/float64(uns.Views)*1000)
+		}
+		fmt.Println()
+	}
+
+	if len(v.TrafficSources) > 0 {
+		fmt.Println("── Traffic Sources ───────────────────────────────────────")
+		printTrafficSourcesAll(v.TrafficSources)
+		fmt.Println()
+	}
+
+	if len(v.DailyMetrics) > 0 {
+		fmt.Println("── Last 14 Days ──────────────────────────────────────────")
+		printDailyTrajectory(v.DailyMetrics, 14)
+		fmt.Println()
+	}
+
+	memberships := videoCohorts(v.ID)
+	if len(memberships) > 0 {
+		fmt.Println("── Cohorts ───────────────────────────────────────────────")
+		fmt.Printf("  %s\n", strings.Join(memberships, ", "))
+		fmt.Println()
+	}
+
 	fmt.Println("── Tags ──────────────────────────────────────────────────")
 	if len(v.Tags) == 0 {
 		fmt.Println("  (no tags)")
@@ -82,4 +121,60 @@ func runVideo(dataPath, id string) error {
 		fmt.Printf("Thumbnail: %s\n", v.ThumbnailURL)
 	}
 	return nil
+}
+
+// printTrafficSourcesAll prints every traffic-source bucket with its share of views.
+func printTrafficSourcesAll(m map[string]TrafficSourceMetric) {
+	type kv struct {
+		k string
+		v TrafficSourceMetric
+	}
+	all := make([]kv, 0, len(m))
+	var totalViews int64
+	for k, v := range m {
+		all = append(all, kv{k, v})
+		totalViews += v.Views
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].v.Views > all[j].v.Views })
+	for _, e := range all {
+		share := 0.0
+		if totalViews > 0 {
+			share = float64(e.v.Views) / float64(totalViews) * 100
+		}
+		fmt.Printf("  %-20s %s views (%.1f%%) — %.0f watch-min\n",
+			e.k, fmtNum(e.v.Views), share, e.v.WatchMin)
+	}
+}
+
+// printDailyTrajectory prints the most-recent n daily metrics in chronological order.
+func printDailyTrajectory(series []DailyMetric, n int) {
+	sorted := make([]DailyMetric, len(series))
+	copy(sorted, series)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Date < sorted[j].Date })
+	start := 0
+	if len(sorted) > n {
+		start = len(sorted) - n
+	}
+	for _, d := range sorted[start:] {
+		fmt.Printf("  %s   views=%-6d watch=%5.0fm  ret=%4.1f%%  subs=%+d\n",
+			d.Date, d.Views, d.EstimatedMinutes, d.AvgRetention,
+			d.SubscribersGained-d.SubscribersLost)
+	}
+}
+
+// videoCohorts returns sorted cohort IDs assigned to a video, or nil if none.
+// Loads the assignments file lazily — returns nil silently if file is missing
+// or unparseable so that `video <id>` still works on a fresh checkout.
+func videoCohorts(videoID string) []string {
+	assignments, err := loadAssignments(cohortAssignmentsPath)
+	if err != nil {
+		return nil
+	}
+	ids := assignments[videoID]
+	if len(ids) == 0 {
+		return nil
+	}
+	out := append([]string(nil), ids...)
+	sort.Strings(out)
+	return out
 }

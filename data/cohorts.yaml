@@ -37,5 +37,8 @@
 
 - id: evergreen-explainers
   name: Evergreen explainers (manual)
-  description: Manually curated videos that age well and merit re-promotion
-  # No rules — assignments are added via `cohort assign evergreen-explainers <video-id>`
+  description: |
+    Manually curated videos that age well and merit re-promotion.
+    Curation heuristic when seeding new candidates: genuine long-form
+    (duration >= 120s, no '#shorts' in title), views >= 100, retention >= 30%.
+    Manual-only — no rules; assignments are added via `cohort assign`.

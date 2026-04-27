@@ -46,6 +46,9 @@ func cmdFetchComments(args []string) error {
 	ff := addFilterFlags(fs)
 	limit := fs.Int("limit", 20, "max top-level comments per video")
 	order := fs.String("order", "relevance", "comment ordering: relevance|time")
+	maxAge := fs.Duration("max-age", 7*24*time.Hour, "skip videos whose comments were fetched more recently than this (use 0 to refetch all)")
+	force := fs.Bool("force", false, "ignore --max-age and refetch every filtered video")
+	dryRun := fs.Bool("dry-run", false, "print which videos would be fetched (and the quota cost) without calling the API")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -60,7 +63,7 @@ func cmdFetchComments(args []string) error {
 	}
 
 	apiKey := os.Getenv("YOUTUBE_API_KEY")
-	if apiKey == "" {
+	if apiKey == "" && !*dryRun {
 		return fmt.Errorf("YOUTUBE_API_KEY must be set in .env")
 	}
 	data, err := loadData(videosJSONPath)
@@ -75,28 +78,63 @@ func cmdFetchComments(args []string) error {
 		return fmt.Errorf("no videos to fetch comments for")
 	}
 
+	existing, err := loadComments(commentsJSONPath)
+	if err != nil {
+		return err
+	}
+
+	// Staleness guard: skip videos with fresh comments unless --force.
+	now := time.Now()
+	var toFetch []Video
+	staleSkipped := 0
+	for _, v := range videos {
+		if *force || *maxAge == 0 {
+			toFetch = append(toFetch, v)
+			continue
+		}
+		prev, ok := existing.Videos[v.ID]
+		if !ok {
+			toFetch = append(toFetch, v)
+			continue
+		}
+		if now.Sub(prev.FetchedAt) > *maxAge {
+			toFetch = append(toFetch, v)
+			continue
+		}
+		staleSkipped++
+	}
+
+	// Preflight: commentThreads.list is 1 quota unit per call.
+	fmt.Printf("Quota preflight: %d videos to fetch (~%d Data API units; %d skipped as fresh-within-%s)\n",
+		len(toFetch), len(toFetch), staleSkipped, *maxAge)
+	if *dryRun {
+		fmt.Println("(dry-run: no API calls)")
+		for _, v := range toFetch {
+			fmt.Printf("  would fetch: %s  %s\n", v.ID, truncate(v.Title, 60))
+		}
+		return nil
+	}
+	if len(toFetch) == 0 {
+		fmt.Println("Nothing to fetch.")
+		return nil
+	}
+
 	ctx := context.Background()
 	svc, err := youtube.NewService(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return fmt.Errorf("creating YouTube service: %w", err)
 	}
 
-	existing, err := loadComments(commentsJSONPath)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
 	fetched := 0
 	skipped := 0
 	commentTotal := 0
-	for i, v := range videos {
+	for i, v := range toFetch {
 		// Comments are disabled or private on a non-trivial subset of videos —
 		// the API returns 403 for those. Treat as a soft skip rather than abort.
 		comments, err := fetchVideoComments(ctx, svc, v.ID, int64(*limit), *order)
 		if err != nil {
 			skipped++
-			fmt.Printf("  [%d/%d] %s: skipped (%v)\n", i+1, len(videos), v.ID, err)
+			fmt.Printf("  [%d/%d] %s: skipped (%v)\n", i+1, len(toFetch), v.ID, err)
 			continue
 		}
 		existing.Videos[v.ID] = VideoComments{
@@ -106,9 +144,9 @@ func cmdFetchComments(args []string) error {
 		}
 		fetched++
 		commentTotal += len(comments)
-		if (i+1)%25 == 0 || i == len(videos)-1 {
+		if (i+1)%25 == 0 || i == len(toFetch)-1 {
 			fmt.Printf("  [%d/%d] fetched=%d skipped=%d total_comments=%d\n",
-				i+1, len(videos), fetched, skipped, commentTotal)
+				i+1, len(toFetch), fetched, skipped, commentTotal)
 		}
 	}
 

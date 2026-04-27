@@ -1,0 +1,66 @@
+{
+  "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+  "videos": {
+    "KLvEbf6p7PI": {
+      "video_id": "KLvEbf6p7PI",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": [
+        {
+          "id": "UgzngIoeisqFUKIm1yB4AaABAg",
+          "author_name": "@DoguhanYaman",
+          "author_url": "http://www.youtube.com/@DoguhanYaman",
+          "text": "Hey! Love your content style and the way you deliver your message — it really stands out! 🙏 Would love to explore a collaboration together. Could you share your business email so we can connect? Looking forward to hearing from you!",
+          "like_count": 1,
+          "published_at": "2026-04-21T10:10:08Z",
+          "updated_at": "2026-04-21T10:10:08Z"
+        }
+      ]
+    },
+    "L60uy8nyHQE": {
+      "video_id": "L60uy8nyHQE",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "ST_zaw4mBcQ": {
+      "video_id": "ST_zaw4mBcQ",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "f0spwtyWhOs": {
+      "video_id": "f0spwtyWhOs",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "jY9HSphKyOI": {
+      "video_id": "jY9HSphKyOI",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "vuiS_ofy12o": {
+      "video_id": "vuiS_ofy12o",
+      "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": [
+        {
+          "id": "UgxPwcYm-ux1l6Ge4Qp4AaABAg",
+          "author_name": "@stonyuk",
+          "author_url": "http://www.youtube.com/@stonyuk",
+          "text": "I don't see the point of this video. Are you reading somebody's post? Are you trying to do a tutorial?",
+          "like_count": 1,
+          "reply_count": 1,
+          "published_at": "2026-04-26T10:22:36Z",
+          "updated_at": "2026-04-26T10:22:36Z"
+        },
+        {
+          "id": "Ugy5i7CdctNJaWeyFeV4AaABAg",
+          "author_name": "@AStarStarship",
+          "author_url": "http://www.youtube.com/@AStarStarship",
+          "text": "Bro, you gotta fix your compressor settings. Set mic gain to -20db average, set compressor to -18db threshold and +12db output gain. It's called a leveling amplifier. Also, too much bass in voice sounds bad through most speakers and makes it harder to hear you and understand what you're saying.",
+          "like_count": 1,
+          "reply_count": 5,
+          "published_at": "2026-04-25T19:58:53Z",
+          "updated_at": "2026-04-25T19:58:53Z"
+        }
+      ]
+    }
+  }
+}

@@ -85,7 +85,8 @@ Comments are qualitative signal. Use them when grading hypotheses: read the mode
 ```bash
 cd /Users/mikelady/dev/youtube_analytics
 go run . fetch
-go run . fetch-analytics
+go run . fetch-analytics --all   # aggregate + per-day + traffic-sources + sub-status
+go run . cohort auto             # refresh cohort assignments from rules
 go run . analyze > data/analytics_report.md
 ```
 
