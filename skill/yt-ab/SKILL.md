@@ -1,0 +1,159 @@
+---
+name: yt-ab
+description: Use when the user wants to A/B test a YouTube video's title or thumbnail using YouTube Studio's native Test and Compare feature. Generates 3 candidate titles from the transcript and drives Studio via Claude-in-Chrome to set up the test. Triggers on "ab test", "a/b test", "test titles", "test thumbnail", "test and compare", "split test", "best title for this".
+user_invocable: true
+---
+
+# yt-ab
+
+A/B test a YouTube video's title (and optionally thumbnail) using YouTube Studio's **native** Test and Compare feature. Generates candidate titles from the video's transcript, then drives Studio in your logged-in Chrome to kick off the test.
+
+## Cadence — read this before answering ANY question about timing
+
+The user may ask "should I test every hour / 4 hours / half-day?" before we start. Here is the right answer (sourced from YouTube Help, TubeBuddy guides, Descript guides — verified April 2026):
+
+**Native YT Test and Compare (titles + thumbnails — what THIS skill does):**
+- Concurrent A/B serving — YouTube distributes impressions across up to 3 variants simultaneously. **There is no cadence to pick.**
+- Test runs up to **2 weeks**, then YT picks the winner.
+- **Winner is decided by watch time, not CTR.** This is counterintuitive — most "boost CTR" advice points at the wrong metric. Surface this to the user.
+- Up to **3 variants per test** (titles, thumbnails, or combinations of both).
+- **Can start immediately after publish.** Concurrent serving handles launch-day algorithm skew internally because all variants are exposed during the same impression burst.
+- A test result of "inconclusive" means view counts were too low for a decisive call. Higher views = more decisive.
+
+**Manual sequential rotation (only relevant for things YT doesn't natively test, like descriptions — NOT what this skill does):**
+- Industry standard: 24 hours per variant, switching at midnight Pacific (matches YT Analytics' day boundary).
+- Wait 2-3 weeks after publish before starting a manual rotation — early data is biased by YT's new-video promotion bump.
+- Hourly / 4-hourly / half-day rotation is measurably worse experimental design (confounds time-of-day with variant effect).
+
+**TL;DR for the user**: "Native YT Test and Compare doesn't take a cadence — it serves all 3 variants concurrently and picks a winner in ~2 weeks based on watch time. So 'every hour vs 4 hours vs half-day' doesn't apply for titles or thumbnails. We'll just kick off the test and let YT run it."
+
+## When this fires
+
+- `/yt-ab <url>` (explicit)
+- "A/B test this title"
+- "Test some title variants for [video]"
+- "Set up Test and Compare for [video]"
+- "What's a better title for this?"
+
+## Args
+
+- `$1` — YouTube video URL OR bare 11-char ID (required).
+- `--transcript <path>` — optional explicit transcript file path. Defaults to fetching via `scripts/generate-transcript.sh`.
+
+## Steps
+
+### 1. Resolve the video ID
+
+Same regex as `/yt-launch`. Verify the video is on the user's channel (Enterprise Vibe Code, `UCyxYcJWs5WstpM2h8KjabUw`) — `go run . video <id>` will surface its presence in `data/videos.json`.
+
+### 2. Get the transcript
+
+Try in order:
+
+1. If `--transcript <path>` provided, read that file.
+2. Else: `bash scripts/generate-transcript.sh <id>` from the repo root. The script wraps the `youtube-transcript-api` CLI (installed via `pipx install youtube-transcript-api`).
+3. If the script reports the package isn't installed, surface the install command and offer to fall back to step 4.
+4. Last resort: read the video's existing `description` field from `data/videos.json` and warn the user that candidates will be lower-quality without the full transcript.
+
+The transcript is cognition input — not stored on disk by this skill.
+
+### 3. Show baseline numbers
+
+```bash
+cd /Users/mikelady/dev/youtube_analytics
+go run . video <id>
+```
+
+Read its current title, view count, retention, traffic-source mix. Use these to inform candidate generation (e.g., if SUBSCRIBER traffic is dominant, your test is testing on viewers who already know the channel — calibrate the angle accordingly).
+
+### 4. Generate candidate titles (cognition — your judgment)
+
+Produce **3 alternative titles** plus reproduce the **original** as a 4th. Constraints:
+
+- **≤60 characters each** (browse-page truncation; sweet spot for desktop + mobile).
+- **Distinct angles** — don't generate near-duplicates. The three angles to cover:
+  - **Outcome-led**: what the viewer GETS by watching ("Stop AI Slop. Start Vibe Coding With Rigor.")
+  - **Surprise-led**: a hook that interrupts pattern-matching ("Why I Drove to Cal Poly to Trash 'Vibe Coding'")
+  - **Identity-led**: speaks to the viewer's self-image as a developer ("A Senior Dev's Manifesto: Surviving the AI Transition")
+- **Match the channel's voice.** Run `go run . titles --top 10 --by retention --type long-form` to see what's worked. Mike's channel tone: technical, candid about cost ($200/mo Claude), not-clickbait. Avoid all-caps shouting, em-dash overuse, and AI-slop tells like "REVEALED" / "INSANE".
+- **Cite content from the transcript** — title should be honest to what's actually in the video.
+
+Show the 4 to the user (original + 3 alternatives) for approval. Use AskUserQuestion to let them swap any. Iterate until they say go.
+
+### 5. Drive YouTube Studio's Test and Compare
+
+This step uses `mcp__claude-in-chrome` against the user's already-logged-in Chrome. Before any browser tool, you MUST first load the chrome tools via ToolSearch (the MCP server's tools are deferred):
+
+```
+ToolSearch select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__find,mcp__claude-in-chrome__click,mcp__claude-in-chrome__form_input,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__take_screenshot
+```
+
+Then:
+
+1. **Check current tabs** with `tabs_context_mcp`. If Studio is already open on this video, reuse the tab. Otherwise:
+2. **Open Studio** with `tabs_create_mcp`, URL: `https://studio.youtube.com/video/<id>/analytics`
+3. **Find the Test and Compare entry point.** As of April 2026, Studio surfaces this via the Analytics tab → there's a "Test & compare" or similar CTA. UI shifts; navigate by reading the page (`get_page_text`) and clicking by text rather than relying on stable selectors.
+4. **Create a new test:**
+   - Test type: **Title** (this skill defaults to title; user can specify `--thumbnail` later)
+   - Add the 3 alternative titles. The original is already a variant by default — don't double-add it.
+   - Confirm the test will run for the YT-default duration (~2 weeks).
+5. **Submit** and **screenshot** the running test for the experiment record.
+
+If Studio's UI has changed in a way the model can't navigate, surface to the user clearly and offer to walk them through the manual steps. **Don't fake success.**
+
+### 6. Record the experiment
+
+Write `data/launch-experiments/<id>.yaml`:
+
+```yaml
+video_id: <id>
+title: "<original title>"
+published_at: <RFC3339 from videos.json>
+test_kind: title
+mode: native
+variants:
+  - kind: original
+    text: "<original title>"
+  - kind: outcome-led
+    text: "<candidate 1>"
+  - kind: surprise-led
+    text: "<candidate 2>"
+  - kind: identity-led
+    text: "<candidate 3>"
+started_at: <RFC3339 UTC now>
+estimated_end_at: <started_at + 14 days>
+status: running
+winner: ""
+notes: ""
+```
+
+The file is gitignored by default (per `.gitignore`'s `data/launch-experiments/` rule). The Sunday weekly review reads these and surfaces running tests in the report.
+
+### 7. Commit (the experiment YAML is gitignored, so this only commits if other files changed)
+
+If you modified anything tracked (e.g. the SKILL.md), commit + push. Otherwise just confirm to the user that the experiment is local-only.
+
+### 8. Report to user
+
+- ✓ Test running in YT Studio with 4 variants (1 original + 3 alternatives)
+- ✓ YT will pick winner by **watch time** in ~2 weeks (mention this — counterintuitive!)
+- ✓ Recorded to `data/launch-experiments/<id>.yaml`
+- The Sunday weekly review will surface this experiment's status
+
+## What this skill does NOT do
+
+- **Doesn't auto-rotate titles via the Data API.** That fights with the native test. Native test is the single source of truth.
+- **Doesn't generate or upload thumbnails.** Image generation is out of scope. The skill describes thumbnail concepts in text if asked but the user makes/uploads images via Studio.
+- **Doesn't run description rotations.** That's a different workflow (see cadence section above) and would need a separate skill.
+- **Doesn't grade the test.** YT decides the winner. The Sunday review just reads the verdict YT delivers and updates the YAML.
+
+## Reference
+
+- Cadence sources: [YouTube Help: A/B test titles and thumbnails](https://support.google.com/youtube/answer/16391400), [TubeBuddy A/B Testing FAQs](https://support.tubebuddy.com/hc/en-us/articles/21191305824027), [Descript: How to A/B Test on YouTube (2026)](https://www.descript.com/blog/article/how-to-ab-test-on-youtube-for-better-video-performance)
+- Primitive Test: `docs/primitive-test.md` — generating candidates is cognition (in this prompt). Driving the browser is transport (Chrome-MCP). Recording the experiment is transport (file write). Grading is YT's job.
+- Channel: Enterprise Vibe Code (`UCyxYcJWs5WstpM2h8KjabUw`).
+- Setup: `pipx install youtube-transcript-api` once for transcript fetching.
+
+## This skill lives in the repo
+
+Symlinked from `~/.claude/skills/yt-ab` → `/Users/mikelady/dev/youtube_analytics/skill/yt-ab`. Edit in the repo; symlink picks up changes.

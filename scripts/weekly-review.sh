@@ -99,22 +99,32 @@ Your job is the cognition step.
      go run . cohort report --since __LAST_MONDAY__
      go run . analyze --compare-periods __PREV_MONDAY__..__PREV_SUNDAY__ __LAST_MONDAY__..__LAST_SUNDAY__
 
-3. Write the weekly review report to __REPORT_FILE__ with this structure:
+3. Surface running A/B experiments. List any data/launch-experiments/*.yaml
+   files where status: running. For each: report the variants, started_at,
+   estimated_end_at, and a one-liner suggestion to check Studio's Test and
+   Compare view for the verdict (the agent does NOT navigate Studio in
+   this Sunday run — that's the /yt-ab skill's job, invoked manually).
+   When a running test passes its estimated_end_at, flag it for human
+   verification.
+
+4. Write the weekly review report to __REPORT_FILE__ with this structure:
      - Lead with cohort movement: per-cohort table comparing this week
        vs prior week. Cohorts are the unit of intentional decision-making.
      - WoW totals from the analyze --compare-periods call.
      - Verdicts on hypotheses you graded this cycle, with reasoning.
+     - Running A/B experiments: status from data/launch-experiments/*.yaml
+       (variant titles, started_at, estimated_end_at).
      - 1-3 NEW hypotheses for next week, each with:
          id like h-__THIS_MONDAY__-N, cohort, prediction,
          evidence_video_ids with cited current metrics, metric,
          direction, and evaluate_after typically 7-14 days out.
 
-4. Persist new hypotheses by running go run . insights new __THIS_MONDAY__
+5. Persist new hypotheses by running go run . insights new __THIS_MONDAY__
    to create the scaffold (it may already exist from the cloud routine;
    that is fine), then edit data/insights/__THIS_MONDAY__.md directly to
    append hypotheses with proper YAML frontmatter.
 
-5. Commit anything you changed (graded insights/*.md plus the new
+6. Commit anything you changed (graded insights/*.md plus the new
    insights file) with message: Weekly review __RUN_DATE__: graded N,
    proposed M. Push to origin/main. The pre-commit hook runs go vet
    plus go test.

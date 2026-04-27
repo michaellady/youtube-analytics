@@ -94,6 +94,14 @@ go run . analyze > data/analytics_report.md
 
 **Dashboard**: `go run . dashboard` (add filter flags for a scoped view)
 
+## Sister skills
+
+When a NEW video drops:
+- **`/yt-launch <id>`** — sets up monitoring (cohort + hypothesis + daily LaunchAgent). Run this first.
+- **`/yt-ab <id>`** — A/B tests title via YouTube Studio's native Test and Compare. Run after `/yt-launch`. Drives Studio in your logged-in Chrome via `mcp__claude-in-chrome`.
+
+These are user-invocable slash commands that orchestrate this skill's primitives plus browser automation. Mention them when the user asks "should I track this launch?" or "how do I A/B test this title?".
+
 ## Closed-Loop Weekly Review (cohorts + hypotheses)
 
 The weekly review is a **skill workflow**, not a single command. The CLI handles transport (data, file IO, deterministic rules); the model handles cognition (grading, hypothesis generation). This split is deliberate — see `docs/primitive-test.md`.

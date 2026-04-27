@@ -153,6 +153,19 @@ make check                 # go vet + go test ./...
 
 The pre-commit hook in `.githooks/pre-commit` runs `go vet` and `go test` whenever `.go/.mod/.sum` files are staged. Bypass with `git commit --no-verify` if you really need to (rarely).
 
+### New-video launch + A/B testing (slash commands)
+
+Two user-invocable Claude skills cover the launch playbook:
+
+- **`/yt-launch <video-url-or-id>`** — sets up monitoring for a freshly published video: tags it into a cohort, writes a launch hypothesis to the insights ledger, installs the daily launch-watch LaunchAgent. Pure orchestration of existing CLI primitives.
+- **`/yt-ab <video-url-or-id>`** — generates 3 candidate titles from the video transcript and drives YouTube Studio's native *Test and Compare* via `mcp__claude-in-chrome` to kick off the test. Records the experiment to `data/launch-experiments/<id>.yaml`.
+
+Both skills live in `skill/yt-launch/SKILL.md` and `skill/yt-ab/SKILL.md`, symlinked into `~/.claude/skills/`. The Sunday weekly review surfaces any running A/B experiments.
+
+For `/yt-ab`, install the transcript helper once: `pipx install youtube-transcript-api`. Or pass `--transcript <path>` with a manually-pasted transcript.
+
+**Cadence — important truth:** YT's native Test and Compare serves variants *concurrently* over ~2 weeks and picks a winner by **watch time** (not CTR). There is no "every hour vs 4 hours vs half-day" cadence to pick — that question only applies to *manual sequential rotation*, which is appropriate only for descriptions (where YT has no native test). For descriptions, rotate every 24 hours at midnight Pacific, starting 2-3 weeks after publish.
+
 ### Scheduled weekly review (macOS)
 
 Install a LaunchAgent that runs the closed-loop review every Sunday at 9 AM local:
