@@ -155,12 +155,7 @@ func runComparePeriods(dataPath, spec string, extra []string, outer VideoFilter)
 
 	var all []*periodStats
 	for _, r := range ranges {
-		// Range's date window overrides any outer Since/Until; everything else
-		// (cohorts, types, duration bounds, exclude IDs) is inherited so users
-		// can scope a comparison with `--cohort` or `--type` flags.
-		merged := outer
-		merged.Since = r.filter.Since
-		merged.Until = r.filter.Until
+		merged := mergeCompareFilter(outer, r.filter)
 		p := &periodStats{label: r.label, filter: merged}
 		p.videos = p.filter.Apply(data.Videos)
 		fake := &ChannelData{
@@ -202,6 +197,17 @@ func runComparePeriods(dataPath, spec string, extra []string, outer VideoFilter)
 		rowFloat2(all, label, func(p *periodStats) float64 { return p.subs1K[t] })
 	}
 	return nil
+}
+
+// mergeCompareFilter overlays a per-range date window on top of an outer
+// filter. The range OWNS the date window (Since/Until); everything else
+// (cohorts, types, duration bounds, exclude IDs, cohort assignments) is
+// inherited so users can scope --compare-periods with --cohort/--type/etc.
+func mergeCompareFilter(outer, rangeFilter VideoFilter) VideoFilter {
+	merged := outer
+	merged.Since = rangeFilter.Since
+	merged.Until = rangeFilter.Until
+	return merged
 }
 
 type compareRange struct {

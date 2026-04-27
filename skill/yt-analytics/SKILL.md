@@ -1,6 +1,6 @@
 ---
 name: yt-analytics
-description: Use when user asks about YouTube analytics, revenue, subscribers, watch time, retention, video performance, title/tag analysis, duplicate detection, data-quality checks, or wants to fetch/view/export channel data. Triggers on "check analytics", "fetch latest", "youtube stats", "how are my videos doing", "best titles", "recent performance", "compare to last run", "since last fetch".
+description: Use when user asks about YouTube analytics, revenue, subscribers, watch time, retention, video performance, title/tag analysis, duplicate detection, data-quality checks, or wants to fetch/view/export channel data. Also triggers on cohort grouping/tagging, hypothesis tracking, weekly/closed-loop reviews, and per-cohort performance. Triggers on "check analytics", "fetch latest", "youtube stats", "how are my videos doing", "best titles", "recent performance", "compare to last run", "since last fetch", "weekly review", "closed loop", "how is the X cohort doing", "what did we predict last week", "grade hypotheses", "cohort report", "insights pending".
 user_invocable: true
 ---
 
@@ -44,6 +44,8 @@ Analytics window for `fetch-analytics` is fixed at 2025-12-01 → today in `fetc
 | `--duration-min N` / `--duration-max N` | Duration bounds in seconds |
 | `--exclude <ID>` | Skip specific video (repeatable) |
 | `--cohort <id>` | Filter to a cohort id from `data/cohorts.yaml` (repeatable) |
+
+> **Go stdlib flag note:** when a command takes both filter flags and a positional argument (e.g. `cohort show <id>`, `insights grade <id>`, `video <id>`), the flags must come *before* the positional. `cohort show --since 2026-04-19 gastown-series` works; `cohort show gastown-series --since 2026-04-19` silently ignores the `--since` flag.
 
 ## Typical Workflows
 

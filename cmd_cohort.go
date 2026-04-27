@@ -63,16 +63,22 @@ func runCohortList(args []string) error {
 	return w.Flush()
 }
 
-// runCohortShow prints videos in a cohort with key metrics.
+// runCohortShow prints videos in a cohort with key metrics. Filter flags
+// (--since, --type, etc.) narrow the listing within the cohort.
 func runCohortShow(args []string) error {
 	fs := flag.NewFlagSet("cohort show", flag.ExitOnError)
+	ff := addFilterFlags(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return fmt.Errorf("usage: cohort show <cohort-id>")
+		return fmt.Errorf("usage: cohort show <cohort-id> [filter flags]")
 	}
 	id := fs.Arg(0)
+	filter, err := ff.build()
+	if err != nil {
+		return err
+	}
 	data, err := loadData(videosJSONPath)
 	if err != nil {
 		return err
@@ -81,10 +87,12 @@ func runCohortShow(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	scoped := filter.Apply(data.Videos)
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "VIDEO_ID\tTYPE\tPUBLISHED\tVIEWS\tRETENTION%\tSUBS\tTITLE")
 	count := 0
-	for _, v := range data.Videos {
+	for _, v := range scoped {
 		if !contains(assignments[v.ID], id) {
 			continue
 		}
@@ -97,7 +105,11 @@ func runCohortShow(args []string) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	fmt.Printf("\n%d videos in cohort %q\n", count, id)
+	fmt.Printf("\n%d videos in cohort %q", count, id)
+	if !filter.IsZero() {
+		fmt.Printf(" %s", filter.Describe())
+	}
+	fmt.Println()
 	return nil
 }
 
@@ -218,15 +230,18 @@ func runCohortReport(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// Loading assignments here directly because the filter only loads them
-	// when --cohort is set.
-	assignments, err := loadAssignments(cohortAssignmentsPath)
-	if err != nil {
-		return err
-	}
 	filter, err := ff.build()
 	if err != nil {
 		return err
+	}
+	// Reuse the filter's assignments when --cohort populated them; otherwise
+	// load directly so the per-cohort tally still works without --cohort.
+	assignments := filter.CohortAssignments
+	if assignments == nil {
+		assignments, err = loadAssignments(cohortAssignmentsPath)
+		if err != nil {
+			return err
+		}
 	}
 	cohorts, err := loadCohorts(cohortsYAMLPath)
 	if err != nil {
