@@ -147,11 +147,32 @@ Hypotheses live in `data/insights/<YYYY-MM-DD>.md` with YAML frontmatter (id, co
 ## Development
 
 ```bash
-make hooks-install     # one-time per clone — activates the pre-commit hook
-make check             # go vet + go test ./...
+make hooks-install         # one-time per clone — activates the pre-commit hook
+make check                 # go vet + go test ./...
 ```
 
 The pre-commit hook in `.githooks/pre-commit` runs `go vet` and `go test` whenever `.go/.mod/.sum` files are staged. Bypass with `git commit --no-verify` if you really need to (rarely).
+
+### Scheduled weekly review (macOS)
+
+Install a LaunchAgent that runs the closed-loop review every Sunday at 9 AM local:
+
+```bash
+make schedule-install      # symlinks plist to ~/Library/LaunchAgents/ and loads it
+make schedule-test         # fires the script immediately, end-to-end
+make schedule-uninstall    # removes the LaunchAgent
+```
+
+The script (`scripts/weekly-review.sh`) does the full Pattern B loop:
+
+1. `git pull` (in case any cloud-side scaffold landed during the week)
+2. Refreshes data: `fetch`, `fetch-analytics --all`, `cohort auto`, `fetch-comments --since <last-monday>`
+3. Invokes `claude -p` headlessly with a self-contained prompt that grades any past-due hypotheses, proposes 1–3 new ones, writes the report to `data/reviews/<date>.md`, commits the changed insights files, and pushes to main
+4. Posts a macOS notification when finished
+
+Logs land in `~/Library/Logs/yt-weekly-review/<date>.log`. Reports land in `data/reviews/<date>.md` (gitignored).
+
+Requirements: `claude` CLI installed and authenticated (which it is if you're reading this); `.env`, `client_secret.json`, and a valid `data/token.json` for the OAuth fetch. The script will fail fast if any are missing.
 
 ## What You Get
 
