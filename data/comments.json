@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+  "fetched_at": "2026-04-27T14:40:32.403653-07:00",
   "videos": {
     "KLvEbf6p7PI": {
       "video_id": "KLvEbf6p7PI",
@@ -59,6 +59,22 @@
           "reply_count": 5,
           "published_at": "2026-04-25T19:58:53Z",
           "updated_at": "2026-04-25T19:58:53Z"
+        }
+      ]
+    },
+    "yoHHVgddUyI": {
+      "video_id": "yoHHVgddUyI",
+      "fetched_at": "2026-04-27T14:40:32.403653-07:00",
+      "comments": [
+        {
+          "id": "Ugy78MuL84XJwMGnflZ4AaABAg",
+          "author_name": "@OneRedKraken",
+          "author_url": "http://www.youtube.com/@OneRedKraken",
+          "text": "This video is like watching someone work in complete silence for 2 hours. What's the point exactly? \"First impressions where?\" lol",
+          "like_count": 2,
+          "reply_count": 2,
+          "published_at": "2026-04-21T12:33:33Z",
+          "updated_at": "2026-04-21T12:33:33Z"
         }
       ]
     }
