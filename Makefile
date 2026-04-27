@@ -1,9 +1,15 @@
-.PHONY: hooks-install schedule-install schedule-uninstall schedule-test test vet check
+.PHONY: hooks-install schedule-install schedule-uninstall schedule-test \
+        launch-watch-install launch-watch-uninstall launch-watch-test \
+        test vet check
 
 REPO_DIR := $(shell pwd)
-LAUNCH_AGENT_LABEL := com.mikelady.yt-weekly-review
 LAUNCH_AGENT_DIR := $(HOME)/Library/LaunchAgents
+
+LAUNCH_AGENT_LABEL := com.mikelady.yt-weekly-review
 LAUNCH_AGENT_PLIST := $(LAUNCH_AGENT_DIR)/$(LAUNCH_AGENT_LABEL).plist
+
+LAUNCH_WATCH_LABEL := com.mikelady.yt-launch-watch
+LAUNCH_WATCH_PLIST := $(LAUNCH_AGENT_DIR)/$(LAUNCH_WATCH_LABEL).plist
 
 # Activate the tracked git hooks (.githooks/) for this clone.
 # Run once after cloning. Idempotent.
@@ -35,6 +41,31 @@ schedule-uninstall:
 # Useful for testing the install end-to-end.
 schedule-test:
 	bash scripts/weekly-review.sh
+
+# Daily launch-window monitor for a single video. Fires twice daily
+# (9 AM + 9 PM local). Designed for the first ~3-5 days after a drop.
+# Required: VIDEO=<video-id>
+launch-watch-install:
+	@if [ -z "$(VIDEO)" ]; then echo "Usage: make launch-watch-install VIDEO=<video-id>"; exit 2; fi
+	@mkdir -p $(LAUNCH_AGENT_DIR)
+	@mkdir -p $(HOME)/Library/Logs/yt-launch-watch
+	@sed -e 's|__REPO_DIR__|$(REPO_DIR)|g' -e 's|__HOME__|$(HOME)|g' -e 's|__VIDEO_ID__|$(VIDEO)|g' \
+		scripts/$(LAUNCH_WATCH_LABEL).plist > $(LAUNCH_WATCH_PLIST)
+	@launchctl unload $(LAUNCH_WATCH_PLIST) 2>/dev/null || true
+	@launchctl load $(LAUNCH_WATCH_PLIST)
+	@echo "Installed $(LAUNCH_WATCH_LABEL) for video $(VIDEO) — fires 9 AM + 9 PM local."
+	@echo "Logs: ~/Library/Logs/yt-launch-watch/$(VIDEO)/"
+	@echo "Run \`make launch-watch-uninstall\` after the launch window."
+
+launch-watch-uninstall:
+	@launchctl unload $(LAUNCH_WATCH_PLIST) 2>/dev/null || true
+	@rm -f $(LAUNCH_WATCH_PLIST)
+	@echo "Uninstalled $(LAUNCH_WATCH_LABEL)."
+
+# Fire the launch-watch script immediately for VIDEO=<id>.
+launch-watch-test:
+	@if [ -z "$(VIDEO)" ]; then echo "Usage: make launch-watch-test VIDEO=<video-id>"; exit 2; fi
+	bash scripts/launch-watch.sh $(VIDEO)
 
 test:
 	go test ./...
