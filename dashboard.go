@@ -90,7 +90,28 @@ type DashboardData struct {
 	SubsJSON           template.JS
 	TopSubVideos       []DashVideo
 
+	// Cohort, traffic-source, and sub-status sections render only when the
+	// matching data is present — keeps a fresh-checkout dashboard from
+	// rendering empty tables.
+	HasCohorts     bool
+	CohortRows     []DashCohortRow
+	HasTrafficMix  bool
+	TrafficMixJSON template.JS
+	HasSubStatus   bool
+	TopUnsubVideos []DashVideo
+
 	FilterDescription string
+}
+
+type DashCohortRow struct {
+	ID         string
+	Name       string
+	Videos     int
+	Views      string
+	Retention  string // view-weighted, e.g. "22.9%"
+	SubsPer1K  string // against all views
+	UnsubConv  string // subs per 1K UNSUBSCRIBED views; "—" when sub-status not present
+	Revenue    string
 }
 
 type DashStats struct {
@@ -277,7 +298,140 @@ func buildDashboardData(data *ChannelData, r *AnalysisResult) DashboardData {
 		}
 	}
 
+	// Cohort, traffic-source, sub-status rollups. Each section is gated on
+	// data availability so a fresh checkout (no cohorts.yaml, no
+	// fetch-analytics --all) doesn't render empty tables.
+	d.HasCohorts, d.CohortRows = buildDashCohorts(data.Videos)
+	d.HasTrafficMix, d.TrafficMixJSON = buildDashTrafficMix(data.Videos)
+	d.HasSubStatus, d.TopUnsubVideos = buildDashTopUnsubConversion(data.Videos)
+
 	return d
+}
+
+// buildDashCohorts loads cohorts + assignments and rolls up per-cohort metrics
+// for the filtered slice. Returns (false, nil) when no assignments exist.
+func buildDashCohorts(videos []Video) (bool, []DashCohortRow) {
+	cohorts, err := loadCohorts(cohortsYAMLPath)
+	if err != nil || len(cohorts) == 0 {
+		return false, nil
+	}
+	assignments, err := loadAssignments(cohortAssignmentsPath)
+	if err != nil || len(assignments) == 0 {
+		return false, nil
+	}
+	stats := make(map[string]*cohortStats, len(cohorts))
+	for _, c := range cohorts {
+		stats[c.ID] = &cohortStats{id: c.ID, name: c.Name}
+	}
+	// Track UNSUBSCRIBED views per cohort separately for the cleaner conversion column.
+	unsubViews := map[string]int64{}
+	for _, v := range videos {
+		ids := assignments[v.ID]
+		uns, hasUnsub := v.SubStatusMetrics["UNSUBSCRIBED"]
+		for _, id := range ids {
+			s, ok := stats[id]
+			if !ok {
+				continue
+			}
+			s.add(v)
+			if hasUnsub {
+				unsubViews[id] += uns.Views
+			}
+		}
+	}
+	rows := make([]DashCohortRow, 0, len(cohorts))
+	for _, c := range cohorts {
+		s := stats[c.ID]
+		ret := 0.0
+		if s.retDenom > 0 {
+			ret = s.retention / s.retDenom
+		}
+		subsPer1K := 0.0
+		if s.views > 0 {
+			subsPer1K = float64(s.subs) / float64(s.views) * 1000
+		}
+		unsubConv := "—"
+		if uv := unsubViews[c.ID]; uv > 0 {
+			unsubConv = fmt.Sprintf("%.2f", float64(s.subs)/float64(uv)*1000)
+		}
+		rows = append(rows, DashCohortRow{
+			ID:        c.ID,
+			Name:      c.Name,
+			Videos:    s.count,
+			Views:     fmtNum(s.views),
+			Retention: fmt.Sprintf("%.1f%%", ret),
+			SubsPer1K: fmt.Sprintf("%.2f", subsPer1K),
+			UnsubConv: unsubConv,
+			Revenue:   fmt.Sprintf("$%.2f", s.revenue),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Videos > rows[j].Videos })
+	return true, rows
+}
+
+// buildDashTrafficMix aggregates traffic_sources across the filtered videos
+// and emits a chart-ready JSON ([{label, views, watchMin}]) sorted desc.
+func buildDashTrafficMix(videos []Video) (bool, template.JS) {
+	totals := map[string]int64{}
+	watch := map[string]float64{}
+	for _, v := range videos {
+		for source, m := range v.TrafficSources {
+			totals[source] += m.Views
+			watch[source] += m.WatchMin
+		}
+	}
+	if len(totals) == 0 {
+		return false, ""
+	}
+	type point struct {
+		Label    string  `json:"label"`
+		Views    int64   `json:"views"`
+		WatchMin float64 `json:"watchMin"`
+	}
+	pts := make([]point, 0, len(totals))
+	for k, v := range totals {
+		pts = append(pts, point{Label: k, Views: v, WatchMin: watch[k]})
+	}
+	sort.Slice(pts, func(i, j int) bool { return pts[i].Views > pts[j].Views })
+	b, _ := json.Marshal(pts)
+	return true, template.JS(b)
+}
+
+// buildDashTopUnsubConversion ranks videos by subs-per-1K-UNSUBSCRIBED.
+// Mirrors printTopByUnsubscribedConversion from analyze.go.
+func buildDashTopUnsubConversion(videos []Video) (bool, []DashVideo) {
+	type entry struct {
+		v     Video
+		unsub int64
+		rate  float64
+	}
+	var rows []entry
+	for _, v := range videos {
+		uns, ok := v.SubStatusMetrics["UNSUBSCRIBED"]
+		if !ok || uns.Views < 100 {
+			continue
+		}
+		rate := float64(v.SubscribersGained) / float64(uns.Views) * 1000
+		rows = append(rows, entry{v: v, unsub: uns.Views, rate: rate})
+	}
+	if len(rows) == 0 {
+		return false, nil
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].rate > rows[j].rate })
+	limit := 10
+	if len(rows) < limit {
+		limit = len(rows)
+	}
+	out := make([]DashVideo, 0, limit)
+	for _, e := range rows[:limit] {
+		dv := toDashVideoWT(e.v)
+		dv.SubsGained = fmt.Sprintf("+%d", e.v.SubscribersGained)
+		dv.SubConv = fmt.Sprintf("%.2f / 1K unsub", e.rate)
+		// Reuse Views slot to show the UNSUBSCRIBED denominator (clearer in this table).
+		dv.Views = fmtNum(e.unsub) + " unsub"
+		out = append(out, dv)
+	}
+	return true, out
 }
 
 func toDashVideo(v Video) DashVideo {
@@ -677,6 +831,70 @@ const dashboardHTML = `<!DOCTYPE html>
 </div>
 {{end}}
 
+{{if .HasCohorts}}
+<!-- Cohort performance -->
+<div class="section">
+  <h2>Cohort Performance</h2>
+  <p style="color:#888;margin-bottom:12px;font-size:14px;">
+    Defined in <code>data/cohorts.yaml</code>. <em>Subs/1K UNSUB</em> requires <code>fetch-analytics --sub-status</code>; falls back to em-dash when missing.
+  </p>
+  <table>
+    <thead><tr><th>Cohort</th><th>Videos</th><th>Views</th><th>Retention</th><th>Subs / 1K</th><th>Subs / 1K UNSUB</th><th>Revenue</th></tr></thead>
+    <tbody>
+    {{range .CohortRows}}
+    <tr>
+      <td>{{.Name}} <span style="color:#666;font-size:12px;">({{.ID}})</span></td>
+      <td>{{.Videos}}</td>
+      <td>{{.Views}}</td>
+      <td>{{.Retention}}</td>
+      <td>{{.SubsPer1K}}</td>
+      <td>{{.UnsubConv}}</td>
+      <td>{{.Revenue}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
+{{if .HasTrafficMix}}
+<!-- Traffic source mix -->
+<div class="section">
+  <h2>Traffic Source Mix</h2>
+  <p style="color:#888;margin-bottom:12px;font-size:14px;">
+    Channel-wide aggregate from <code>fetch-analytics --traffic-sources</code>. Click a bar to see watch-min in the tooltip.
+  </p>
+  <div class="chart-container"><canvas id="trafficMixChart"></canvas></div>
+</div>
+{{end}}
+
+{{if .HasSubStatus}}
+<!-- Top by UNSUBSCRIBED conversion -->
+<div class="section">
+  <h2>Top 10 by UNSUBSCRIBED Conversion</h2>
+  <p style="color:#888;margin-bottom:12px;font-size:14px;">
+    Subs gained per 1K <em>UNSUBSCRIBED</em> views — the actual conversion-target population. Min 100 unsub views. Requires <code>fetch-analytics --sub-status</code>.
+  </p>
+  <table>
+    <thead><tr><th></th><th>Title</th><th>Type</th><th>Subs</th><th>Conversion</th><th>Unsub views</th><th>Watch Time</th><th>Published</th></tr></thead>
+    <tbody>
+    {{range .TopUnsubVideos}}
+    <tr>
+      <td><img class="title-thumb" src="{{.Thumbnail}}" alt="" loading="lazy"></td>
+      <td><a href="{{.URL}}" target="_blank">{{.Title}}</a></td>
+      <td><span class="type-badge {{.Type}}">{{.Type}}</span></td>
+      <td>{{.SubsGained}}</td>
+      <td>{{.SubConv}}</td>
+      <td>{{.Views}}</td>
+      <td>{{.WatchTime}}</td>
+      <td>{{.Date}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+
 </div>
 
 <script>
@@ -1012,6 +1230,48 @@ new Chart(document.getElementById('subTrendChart'), {
       },
       scales: {
         y: { beginAtZero: true, title: { display: true, text: 'Subs per 1K Views' } }
+      }
+    }
+  });
+})();
+{{end}}
+
+{{if .HasTrafficMix}}
+// Traffic source mix bar chart
+(function() {
+  const data = {{.TrafficMixJSON}};
+  const labels = data.map(d => d.label);
+  const views = data.map(d => d.views);
+  const watchMin = data.map(d => d.watchMin);
+  // Distinct color per bar so the legend isn't needed.
+  const palette = ['#3498db','#e74c3c','#e67e22','#9b59b6','#1abc9c','#f39c12','#16a085','#2ecc71','#c0392b','#7f8c8d'];
+  new Chart(document.getElementById('trafficMixChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Views',
+        data: views,
+        backgroundColor: labels.map((_,i) => palette[i % palette.length] + 'cc'),
+        borderColor: labels.map((_,i) => palette[i % palette.length]),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(ctx) {
+              return 'Watch-min: ' + Math.round(watchMin[ctx.dataIndex]).toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Views' } }
       }
     }
   });
