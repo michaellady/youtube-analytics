@@ -90,8 +90,8 @@ ToolSearch select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome_
 
 Then:
 
-1. **Check current tabs** with `tabs_context_mcp`. If Studio is already open on this video, reuse the tab. Otherwise:
-2. **Open Studio** with `tabs_create_mcp`, URL: `https://studio.youtube.com/video/<id>/analytics`
+1. **Check current tabs** with `tabs_context_mcp` (with `createIfEmpty: true` if no MCP tab group exists yet). Reuse if Studio is already open on this video.
+2. **Open Studio** with `tabs_create_mcp` if needed, then `navigate` to `https://studio.youtube.com/video/<id>/edit` — the edit page is the right starting point. Test and Compare is NOT at top-level URLs like `/abtesting` or channel-level `/test_and_compare` (both 404). Don't waste turns trying.
 3. **Find the Test and Compare entry point.** As of April 2026, Studio surfaces this via the Analytics tab → there's a "Test & compare" or similar CTA. UI shifts; navigate by reading the page (`get_page_text`) and clicking by text rather than relying on stable selectors.
 4. **Create a new test:**
    - Test type: **Title** (this skill defaults to title; user can specify `--thumbnail` later)
@@ -99,7 +99,14 @@ Then:
    - Confirm the test will run for the YT-default duration (~2 weeks).
 5. **Submit** and **screenshot** the running test for the experiment record.
 
-If Studio's UI has changed in a way the model can't navigate, surface to the user clearly and offer to walk them through the manual steps. **Don't fake success.**
+**Eligibility caveat (real issue observed 2026-04-27).** Native Test and Compare appears to require an impressions baseline before Studio surfaces the affordance. For a video <24 hours old with <100 views, the option may not appear anywhere — and that's NOT a navigation failure on your part, it's YouTube gating the feature. If you've checked the edit page, the analytics → reach tab, and any "..." menus and still can't find a native "Test and compare" entry:
+
+- **DO NOT click TubeBuddy's "A/B Testing" button as a substitute.** That's a different feature (third-party sequential rotation, worse experimental design). The user explicitly chose native testing.
+- Save the candidate titles to `data/launch-experiments/<id>.yaml` with `status: pending-eligibility` and a `notes` field explaining why and when to retry (typically 3-7 days post-publish for substantive long-forms on this channel — when daily impressions cross ~1K).
+- Tell the user clearly: "Native Test and Compare doesn't appear available for this video yet — likely needs more impressions. I've saved the candidate titles to <path>; re-run `/yt-ab <id>` in a few days."
+- Suggest checking `~/Library/Logs/yt-launch-watch/<id>/` daily logs for impressions growth.
+
+**Don't fake success.** The skill's value is in the candidate generation + the experiment record. The button-click is the small part; saving with `status: pending-eligibility` is a legitimate outcome.
 
 ### 6. Record the experiment
 
