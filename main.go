@@ -29,6 +29,8 @@ func main() {
 		err = cmdFetchAnalytics(args)
 	case "fetch-comments":
 		err = cmdFetchComments(args)
+	case "fetch-peers":
+		err = cmdFetchPeers(args)
 	case "analyze":
 		err = cmdAnalyze(args)
 	case "dashboard":
@@ -74,6 +76,8 @@ func printUsage() {
 	fmt.Println("  fetch-analytics   Fetch watch time data via OAuth2 → merge into data/videos.json")
 	fmt.Println("                    Flags: --daily, --traffic-sources, --sub-status, --all")
 	fmt.Println("  fetch-comments    Fetch top-level comments per video → data/comments.json")
+	fmt.Println("  fetch-peers       Fetch top recent videos from peer channels (data/peer-channels.yaml)")
+	fmt.Println("                    → data/peer-videos.json. Used by /yt-ab for title grounding.")
 	fmt.Println("  analyze           Analyze data and print terminal report")
 	fmt.Println("  dashboard         Generate interactive HTML dashboard → data/dashboard.html")
 	fmt.Println("  find-duplicates   Detect near-duplicate uploads")

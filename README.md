@@ -71,6 +71,7 @@ go run . dashboard
 | `fetch` | Fetch all video metadata from YouTube Data API v3. Saves to `data/videos.json` and snapshots to `data/snapshots/` (keeps last 30) |
 | `fetch-analytics` | Fetch watch time data via OAuth2. Merges into `data/videos.json`. Flags: `--daily`, `--traffic-sources`, `--sub-status`, `--all` |
 | `fetch-comments` | Fetch top-level comments per video into `data/comments.json`. Flags: `--limit`, `--order`, `--max-age`, `--force`, `--dry-run` |
+| `fetch-peers` | Pull top recent videos from peer channels in `data/peer-channels.yaml` into `data/peer-videos.json`. Used by `/yt-ab` for title grounding. Flags: `--window` (default 90d), `--top` (default 15), `--dry-run` |
 | `analyze` | Print a detailed terminal report. Supports `--diff <snapshot>` and `--compare-periods A..B C..D` modes |
 | `dashboard` | Generate an interactive HTML dashboard at `data/dashboard.html` |
 | `find-duplicates` | Detect near-duplicate uploads (same title, similar duration, close timestamps) |
@@ -158,7 +159,7 @@ The pre-commit hook in `.githooks/pre-commit` runs `go vet` and `go test` whenev
 Two user-invocable Claude skills cover the launch playbook:
 
 - **`/yt-launch <video-url-or-id>`** — sets up monitoring for a freshly published video: tags it into a cohort, writes a launch hypothesis to the insights ledger, installs the daily launch-watch LaunchAgent. Pure orchestration of existing CLI primitives.
-- **`/yt-ab <video-url-or-id>`** — generates 3 candidate titles from the video transcript and drives YouTube Studio's native *Test and Compare* via `mcp__claude-in-chrome` to kick off the test. Records the experiment to `data/launch-experiments/<id>.yaml`.
+- **`/yt-ab <video-url-or-id>`** — generates 3 candidate titles grounded in (a) the video transcript, (b) Mike's own top-retention long-forms, and (c) top recent videos from peer channels in the AI-coding niche (refreshed weekly by `fetch-peers`). Drives YouTube Studio's native *Test and Compare* via `mcp__claude-in-chrome` to kick off the test. Records the experiment to `data/launch-experiments/<id>.yaml`.
 
 Both skills live in `skill/yt-launch/SKILL.md` and `skill/yt-ab/SKILL.md`, symlinked into `~/.claude/skills/`. The Sunday weekly review surfaces any running A/B experiments.
 

@@ -68,17 +68,37 @@ Read its current title, view count, retention, traffic-source mix. Use these to 
 
 ### 4. Generate candidate titles (cognition — your judgment)
 
-Produce **3 alternative titles** plus reproduce the **original** as a 4th. Constraints:
+You have THREE grounding inputs. Read all three before drafting:
 
-- **≤60 characters each** (browse-page truncation; sweet spot for desktop + mobile).
-- **Distinct angles** — don't generate near-duplicates. The three angles to cover:
-  - **Outcome-led**: what the viewer GETS by watching ("Stop AI Slop. Start Vibe Coding With Rigor.")
-  - **Surprise-led**: a hook that interrupts pattern-matching ("Why I Drove to Cal Poly to Trash 'Vibe Coding'")
-  - **Identity-led**: speaks to the viewer's self-image as a developer ("A Senior Dev's Manifesto: Surviving the AI Transition")
-- **Match the channel's voice.** Run `go run . titles --top 10 --by retention --type long-form` to see what's worked. Mike's channel tone: technical, candid about cost ($200/mo Claude), not-clickbait. Avoid all-caps shouting, em-dash overuse, and AI-slop tells like "REVEALED" / "INSANE".
+**(a) Transcript** — what the video actually says. Don't lie.
+
+**(b) Channel voice (what's worked HERE):**
+```bash
+go run . titles --top 10 --by retention --type long-form
+```
+Mike's channel tone: technical, candid about cost ($200/mo Claude), not-clickbait. Avoid all-caps shouting, em-dash overuse, and AI-slop tells like "REVEALED" / "INSANE".
+
+**(c) Peer-niche signal (what's working ACROSS the AI-coding niche right now):**
+```bash
+jq -r '.fetched_at, (.channels | to_entries[] | "=== \(.key) (\(.value.angle))===", (.value.videos[] | "  \(.view_count) views: \(.title)"))' data/peer-videos.json
+```
+Updated weekly by `fetch-peers`. Each peer has a one-line `angle` (Fireship's hyper-tight news, t3dotgg's opinion-led POV, indydevdan's narrative outcome promise, etc). Use the contrast between Mike's voice and peer angles to pick distinct hook archetypes. **Do NOT mimic peer voices wholesale** — they're inspiration for *angle* (outcome-led, surprise-led, identity-led), not for word-for-word style. Mike's voice still wins.
+
+Produce **3 alternative titles** plus the **original** as a 4th. Constraints:
+
+- **≤60 characters each** (browse-page truncation sweet spot for desktop + mobile).
+- **Distinct angles** — don't generate near-duplicates. Cover three of these archetypes (which to pick depends on the video; surface your choice to the user):
+  - **Outcome-led**: what the viewer GETS by watching ("Stop AI Slop: Enterprise Rigor for Vibe Coding")
+  - **Surprise-led**: hook that interrupts pattern-matching ("Why I Went to Cal Poly to Trash 'Vibe Coding'")
+  - **Identity-led**: speaks to the viewer's self-image ("Senior Devs: Your New Job Is Yield Management")
+  - **Provocative imperative** (t3dotgg-style): a clear directive that challenges a default ("Delete Your CLAUDE.md")
+  - **News-reaction** (Fireship-style): subject + dramatic verb ("Anthropic Killed Tool Calling")
+  - **Concrete-deliverable** (AI-Jason-style): "Build X with Y" promise, framework name forward
 - **Cite content from the transcript** — title should be honest to what's actually in the video.
 
-Show the 4 to the user (original + 3 alternatives) for approval. Use AskUserQuestion to let them swap any. Iterate until they say go.
+Show the 4 (original + 3 alternatives) to the user with the angle you picked for each AND a one-liner about why. Use AskUserQuestion to let them swap any. Iterate until they say go.
+
+**If `data/peer-videos.json` is missing or stale** (>14 days old): tell the user `go run . fetch-peers` would refresh peer-niche signal, then proceed with channel-voice-only grounding. Don't block on it.
 
 ### 5. Drive YouTube Studio's Test and Compare
 

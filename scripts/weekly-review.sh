@@ -4,7 +4,7 @@
 # What this does:
 #   1. Pulls latest main (in case the cloud routine pushed an insights scaffold)
 #   2. Refreshes channel data: fetch, fetch-analytics --all, cohort auto,
-#      fetch-comments since last Monday
+#      fetch-comments since last Monday, fetch-peers (peer-niche titles)
 #   3. Invokes `claude -p` headlessly with a prompt that drives the full
 #      closed-loop weekly review — grading past-due hypotheses, proposing
 #      new ones, writing the report
@@ -68,6 +68,8 @@ PREV_SUNDAY="$(date -v-mon -v-8d +%Y-%m-%d 2>/dev/null || date -d 'last monday -
   go run . cohort auto
   echo "--- fetch-comments (since last Monday, with quota guard)"
   go run . fetch-comments --since "$LAST_MONDAY" --limit 10 || echo "(comments fetch had errors; continuing)"
+  echo "--- fetch-peers (refresh peer-niche signal for /yt-ab title grounding)"
+  go run . fetch-peers || echo "(peer fetch had errors; continuing)"
 
   echo
   echo "--- invoking claude -p for cognition step ---"

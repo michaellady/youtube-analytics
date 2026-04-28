@@ -8,6 +8,7 @@ __pycache__/
 # comments.json). Ignore fetched/generated bulk data and secrets.
 data/videos.json
 data/cohort_assignments.json
+data/peer-videos.json
 data/tags.json
 data/snapshots/
 data/dashboard.html
