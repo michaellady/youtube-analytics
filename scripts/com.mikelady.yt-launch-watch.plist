@@ -8,9 +8,10 @@
   Uninstall: make launch-watch-uninstall
   Test:      make launch-watch-test VIDEO=<video-id>
 
-  Schedule: every day at 09:00 and 21:00 local time (twice daily —
-  morning + evening — gives reasonable resolution on launch growth
-  without burning quota every hour).
+  Schedule: every day at 09:00 local time. Single daily check-in is
+  enough resolution for launch-window deltas and minimizes the OAuth
+  re-auth nag if refresh tokens expire mid-window (GCP "Testing"-
+  status apps invalidate refresh tokens after ~7 days).
 
   Logs: ~/Library/Logs/yt-launch-watch/<video-id>/<YYYY-MM-DD-HHMM>.log
 -->
@@ -35,10 +36,6 @@
   <array>
     <dict>
       <key>Hour</key><integer>9</integer>
-      <key>Minute</key><integer>0</integer>
-    </dict>
-    <dict>
-      <key>Hour</key><integer>21</integer>
       <key>Minute</key><integer>0</integer>
     </dict>
   </array>

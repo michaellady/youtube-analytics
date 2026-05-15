@@ -42,8 +42,8 @@ schedule-uninstall:
 schedule-test:
 	bash scripts/weekly-review.sh
 
-# Daily launch-window monitor for a single video. Fires twice daily
-# (9 AM + 9 PM local). Designed for the first ~3-5 days after a drop.
+# Daily launch-window monitor for a single video. Fires once daily
+# at 9 AM local. Designed for the first ~1-2 weeks after a drop.
 # Required: VIDEO=<video-id>
 launch-watch-install:
 	@if [ -z "$(VIDEO)" ]; then echo "Usage: make launch-watch-install VIDEO=<video-id>"; exit 2; fi
@@ -53,7 +53,7 @@ launch-watch-install:
 		scripts/$(LAUNCH_WATCH_LABEL).plist > $(LAUNCH_WATCH_PLIST)
 	@launchctl unload $(LAUNCH_WATCH_PLIST) 2>/dev/null || true
 	@launchctl load $(LAUNCH_WATCH_PLIST)
-	@echo "Installed $(LAUNCH_WATCH_LABEL) for video $(VIDEO) — fires 9 AM + 9 PM local."
+	@echo "Installed $(LAUNCH_WATCH_LABEL) for video $(VIDEO) — fires daily at 9 AM local."
 	@echo "Logs: ~/Library/Logs/yt-launch-watch/$(VIDEO)/"
 	@echo "Run \`make launch-watch-uninstall\` after the launch window."
 
