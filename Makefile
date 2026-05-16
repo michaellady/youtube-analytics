@@ -1,5 +1,6 @@
 .PHONY: hooks-install schedule-install schedule-uninstall schedule-test \
         launch-watch-install launch-watch-uninstall launch-watch-test \
+        studio-watch-install studio-watch-uninstall studio-watch-test \
         test vet check
 
 REPO_DIR := $(shell pwd)
@@ -10,6 +11,9 @@ LAUNCH_AGENT_PLIST := $(LAUNCH_AGENT_DIR)/$(LAUNCH_AGENT_LABEL).plist
 
 LAUNCH_WATCH_LABEL := com.mikelady.yt-launch-watch
 LAUNCH_WATCH_PLIST := $(LAUNCH_AGENT_DIR)/$(LAUNCH_WATCH_LABEL).plist
+
+STUDIO_WATCH_LABEL := com.mikelady.yt-studio-watch
+STUDIO_WATCH_PLIST := $(LAUNCH_AGENT_DIR)/$(STUDIO_WATCH_LABEL).plist
 
 # Activate the tracked git hooks (.githooks/) for this clone.
 # Run once after cloning. Idempotent.
@@ -66,6 +70,34 @@ launch-watch-uninstall:
 launch-watch-test:
 	@if [ -z "$(VIDEO)" ]; then echo "Usage: make launch-watch-test VIDEO=<video-id>"; exit 2; fi
 	bash scripts/launch-watch.sh $(VIDEO)
+
+# Daily Studio-screenshot pass for a single video. Captures what's
+# ONLY in Studio's UI (realtime 48h, labeled traffic surfaces, retention
+# curve, A/B verdict). Requires Chrome + claude-in-chrome MCP connected.
+# Fires daily at 9:15 AM local (15 min after launch-watch). Designed
+# for the same 1-2 week launch window as launch-watch.
+# Required: VIDEO=<video-id>
+studio-watch-install:
+	@if [ -z "$(VIDEO)" ]; then echo "Usage: make studio-watch-install VIDEO=<video-id>"; exit 2; fi
+	@mkdir -p $(LAUNCH_AGENT_DIR)
+	@mkdir -p $(HOME)/Library/Logs/yt-studio-watch
+	@sed -e 's|__REPO_DIR__|$(REPO_DIR)|g' -e 's|__HOME__|$(HOME)|g' -e 's|__VIDEO_ID__|$(VIDEO)|g' \
+		scripts/$(STUDIO_WATCH_LABEL).plist > $(STUDIO_WATCH_PLIST)
+	@launchctl unload $(STUDIO_WATCH_PLIST) 2>/dev/null || true
+	@launchctl load $(STUDIO_WATCH_PLIST)
+	@echo "Installed $(STUDIO_WATCH_LABEL) for video $(VIDEO) — fires daily at 9:15 AM local."
+	@echo "Output: ~/Library/Logs/yt-studio-watch/$(VIDEO)/<date>/"
+	@echo "Requires Chrome + claude-in-chrome MCP connected when it fires."
+
+studio-watch-uninstall:
+	@launchctl unload $(STUDIO_WATCH_PLIST) 2>/dev/null || true
+	@rm -f $(STUDIO_WATCH_PLIST)
+	@echo "Uninstalled $(STUDIO_WATCH_LABEL)."
+
+# Fire the studio-watch script immediately for VIDEO=<id>.
+studio-watch-test:
+	@if [ -z "$(VIDEO)" ]; then echo "Usage: make studio-watch-test VIDEO=<video-id>"; exit 2; fi
+	bash scripts/studio-watch.sh $(VIDEO)
 
 test:
 	go test ./...
