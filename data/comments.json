@@ -1,14 +1,64 @@
 {
-  "fetched_at": "2026-05-17T09:00:17.854646-07:00",
+  "fetched_at": "2026-05-28T17:53:53.860385-07:00",
   "videos": {
+    "-lOFyZuu0W8": {
+      "video_id": "-lOFyZuu0W8",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "2pSJJA7ZvEI": {
+      "video_id": "2pSJJA7ZvEI",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "5589aju1r30": {
+      "video_id": "5589aju1r30",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "6mViYwrN9hA": {
+      "video_id": "6mViYwrN9hA",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "7TgoRaXvhn8": {
+      "video_id": "7TgoRaXvhn8",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "7jQ0LbMXZtY": {
+      "video_id": "7jQ0LbMXZtY",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "8qYsGMmyKaA": {
       "video_id": "8qYsGMmyKaA",
       "fetched_at": "2026-05-03T09:00:20.884636-07:00",
       "comments": []
     },
+    "9nOxvAhZyWo": {
+      "video_id": "9nOxvAhZyWo",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "AIKk9coN_cM": {
+      "video_id": "AIKk9coN_cM",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "Al8pNrBw6Ok": {
       "video_id": "Al8pNrBw6Ok",
       "fetched_at": "2026-05-03T09:00:20.884636-07:00",
+      "comments": []
+    },
+    "CUYhyIzSVoc": {
+      "video_id": "CUYhyIzSVoc",
+      "fetched_at": "2026-05-28T17:53:53.860385-07:00",
+      "comments": []
+    },
+    "EE-IMjyvAWQ": {
+      "video_id": "EE-IMjyvAWQ",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "H9HR4_Qz-Z0": {
@@ -77,9 +127,45 @@
         }
       ]
     },
+    "HqINZnE3F48": {
+      "video_id": "HqINZnE3F48",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "I-JDx4hPqZ4": {
+      "video_id": "I-JDx4hPqZ4",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": [
+        {
+          "id": "UgzLKmuf36id5ecSs894AaABAg",
+          "author_name": "@alisilarbi8073",
+          "author_url": "http://www.youtube.com/@alisilarbi8073",
+          "text": "But you need a base for that kind of toold, in my opinion that's what claude code, codex, pi etc... are trying to solve. Isnt that right ?",
+          "like_count": 1,
+          "reply_count": 1,
+          "published_at": "2026-05-24T00:28:26Z",
+          "updated_at": "2026-05-24T00:28:26Z"
+        }
+      ]
+    },
+    "IDWBji2VpLs": {
+      "video_id": "IDWBji2VpLs",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "IN6c43cITvY": {
       "video_id": "IN6c43cITvY",
       "fetched_at": "2026-05-03T09:00:20.884636-07:00",
+      "comments": []
+    },
+    "Ihxif3hpZQE": {
+      "video_id": "Ihxif3hpZQE",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "J4THNnn2mZ0": {
+      "video_id": "J4THNnn2mZ0",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "KLvEbf6p7PI": {
@@ -102,9 +188,29 @@
       "fetched_at": "2026-04-27T13:40:02.733935-07:00",
       "comments": []
     },
+    "Q2XMMcK9wuo": {
+      "video_id": "Q2XMMcK9wuo",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "QUZAgCGfCBE": {
+      "video_id": "QUZAgCGfCBE",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "ST_zaw4mBcQ": {
       "video_id": "ST_zaw4mBcQ",
       "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "X6azoBYnvKY": {
+      "video_id": "X6azoBYnvKY",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "XBvy8qzeU7o": {
+      "video_id": "XBvy8qzeU7o",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "f0spwtyWhOs": {
@@ -112,9 +218,19 @@
       "fetched_at": "2026-04-27T13:40:02.733935-07:00",
       "comments": []
     },
+    "gV82NPOvBYw": {
+      "video_id": "gV82NPOvBYw",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "jY9HSphKyOI": {
       "video_id": "jY9HSphKyOI",
       "fetched_at": "2026-04-27T13:40:02.733935-07:00",
+      "comments": []
+    },
+    "jcGJfZkYn34": {
+      "video_id": "jcGJfZkYn34",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "jdq_EAG5cu0": {
@@ -122,9 +238,24 @@
       "fetched_at": "2026-05-03T09:00:20.884636-07:00",
       "comments": []
     },
+    "kGCKqNz9UhY": {
+      "video_id": "kGCKqNz9UhY",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
+    "qaEcHWsdOb4": {
+      "video_id": "qaEcHWsdOb4",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
+      "comments": []
+    },
     "sDC8-9HFM6c": {
       "video_id": "sDC8-9HFM6c",
       "fetched_at": "2026-05-17T09:00:17.854646-07:00",
+      "comments": []
+    },
+    "sHkVheh1SHM": {
+      "video_id": "sHkVheh1SHM",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "t_XilACa9fc": {
@@ -134,12 +265,17 @@
     },
     "uEposKmbFvY": {
       "video_id": "uEposKmbFvY",
-      "fetched_at": "2026-05-17T09:00:17.854646-07:00",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "uZjSyAdTJUE": {
       "video_id": "uZjSyAdTJUE",
       "fetched_at": "2026-05-17T09:00:17.854646-07:00",
+      "comments": []
+    },
+    "vBz234iBM2Y": {
+      "video_id": "vBz234iBM2Y",
+      "fetched_at": "2026-05-24T09:00:25.163342-07:00",
       "comments": []
     },
     "vuiS_ofy12o": {
