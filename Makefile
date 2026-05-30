@@ -1,6 +1,7 @@
 .PHONY: hooks-install schedule-install schedule-uninstall schedule-test \
         launch-watch-install launch-watch-uninstall launch-watch-test \
         studio-watch-install studio-watch-uninstall studio-watch-test \
+        clip-loop-reminder-install clip-loop-reminder-uninstall clip-loop-reminder-test \
         test vet check
 
 REPO_DIR := $(shell pwd)
@@ -14,6 +15,9 @@ LAUNCH_WATCH_PLIST := $(LAUNCH_AGENT_DIR)/$(LAUNCH_WATCH_LABEL).plist
 
 STUDIO_WATCH_LABEL := com.mikelady.yt-studio-watch
 STUDIO_WATCH_PLIST := $(LAUNCH_AGENT_DIR)/$(STUDIO_WATCH_LABEL).plist
+
+CLIP_LOOP_LABEL := com.mikelady.yt-clip-loop-reminder
+CLIP_LOOP_PLIST := $(LAUNCH_AGENT_DIR)/$(CLIP_LOOP_LABEL).plist
 
 # Activate the tracked git hooks (.githooks/) for this clone.
 # Run once after cloning. Idempotent.
@@ -98,6 +102,29 @@ studio-watch-uninstall:
 studio-watch-test:
 	@if [ -z "$(VIDEO)" ]; then echo "Usage: make studio-watch-test VIDEO=<video-id>"; exit 2; fi
 	bash scripts/studio-watch.sh $(VIDEO)
+
+# Daily 9:30 AM reminder to run the cross-platform clip closed loop interactively.
+# Notification only (the FB/IG/TikTok/LinkedIn half needs a logged-in browser that
+# can't run headless). Uninstall when the ~2-3 week measurement window closes.
+clip-loop-reminder-install:
+	@mkdir -p $(LAUNCH_AGENT_DIR)
+	@mkdir -p $(HOME)/Library/Logs/yt-clip-loop-reminder
+	@sed -e 's|__REPO_DIR__|$(REPO_DIR)|g' -e 's|__HOME__|$(HOME)|g' \
+		scripts/$(CLIP_LOOP_LABEL).plist > $(CLIP_LOOP_PLIST)
+	@launchctl unload $(CLIP_LOOP_PLIST) 2>/dev/null || true
+	@launchctl load $(CLIP_LOOP_PLIST)
+	@echo "Installed $(CLIP_LOOP_LABEL) — fires daily at 9:30 AM local."
+	@echo "Log: ~/Library/Logs/yt-clip-loop-reminder/reminder.log"
+	@echo "Verify: launchctl list | grep yt-clip-loop-reminder"
+	@echo "Uninstall when done: make clip-loop-reminder-uninstall"
+
+clip-loop-reminder-uninstall:
+	@launchctl unload $(CLIP_LOOP_PLIST) 2>/dev/null || true
+	@rm -f $(CLIP_LOOP_PLIST)
+	@echo "Uninstalled $(CLIP_LOOP_LABEL)."
+
+clip-loop-reminder-test:
+	bash scripts/clip-loop-reminder.sh
 
 test:
 	go test ./...
