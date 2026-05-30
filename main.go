@@ -53,6 +53,8 @@ func main() {
 		err = cmdCohort(args)
 	case "insights":
 		err = cmdInsights(args)
+	case "clip-results":
+		err = cmdClipResults(args)
 	case "-h", "--help", "help":
 		printUsage()
 		return
@@ -89,6 +91,8 @@ func printUsage() {
 	fmt.Println("  update-tags       Preview or push tag updates to YouTube (dry-run default)")
 	fmt.Println("  cohort <subcmd>   Local cohort tagging: list|show|assign|unassign|auto|report")
 	fmt.Println("  insights <subcmd> Hypothesis ledger: list|pending|grade|new")
+	fmt.Println("  clip-results report  Consolidate cross-platform OpusClip results (used by /clip-results)")
+	fmt.Println("                       Flags: --results <json> --out <md> [--no-youtube-join]")
 	fmt.Println()
 	fmt.Println("Common flags (analyze, dashboard, export):")
 	fmt.Println("  --since YYYY-MM-DD        Filter videos published on/after this date")
