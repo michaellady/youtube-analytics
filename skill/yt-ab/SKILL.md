@@ -84,7 +84,7 @@ jq -r '.fetched_at, (.channels | to_entries[] | "=== \(.key) (\(.value.angle))==
 ```
 Updated weekly by `fetch-peers`. Each peer has a one-line `angle` (Fireship's hyper-tight news, t3dotgg's opinion-led POV, indydevdan's narrative outcome promise, etc). Use the contrast between Mike's voice and peer angles to pick distinct hook archetypes. **Do NOT mimic peer voices wholesale** — they're inspiration for *angle* (outcome-led, surprise-led, identity-led), not for word-for-word style. Mike's voice still wins.
 
-Produce **3 alternative titles** plus the **original** as a 4th. Constraints:
+Produce **3 alternative candidates**. (The native test fits **3 variants total**: the original as control plus **2** of your alternatives. Generating 3 gives the user a real choice of which 2 to run.) Constraints:
 
 - **≤60 characters each** (browse-page truncation sweet spot for desktop + mobile).
 - **Distinct angles** — don't generate near-duplicates. Cover three of these archetypes (which to pick depends on the video; surface your choice to the user):
@@ -96,7 +96,7 @@ Produce **3 alternative titles** plus the **original** as a 4th. Constraints:
   - **Concrete-deliverable** (AI-Jason-style): "Build X with Y" promise, framework name forward
 - **Cite content from the transcript** — title should be honest to what's actually in the video.
 
-Show the 4 (original + 3 alternatives) to the user with the angle you picked for each AND a one-liner about why. Use AskUserQuestion to let them swap any. Iterate until they say go.
+Show the original + 3 alternatives to the user with the angle you picked for each AND a one-liner about why. Then use AskUserQuestion (`multiSelect: true`) to have them pick **which 2 alternatives** go into the test alongside the original — the native dialog fits only 3 total. Let them swap wording too. Iterate until they say go.
 
 **If `data/peer-videos.json` is missing or stale** (>14 days old): tell the user `go run . fetch-peers` would refresh peer-niche signal, then proceed with channel-voice-only grounding. Don't block on it.
 
@@ -118,8 +118,8 @@ Then:
 
 5. **Fill the variant fields.** The dialog shows three input fields:
    - Title 1 is pre-filled with the current title (the original) — don't touch it.
-   - Title 2 is required.
-   - Title 3 is optional but recommended (3 variants > 2 for statistical power; ask the user which alternative(s) they want).
+   - Title 2 = the user's first chosen alternative (required).
+   - Title 3 = the user's second chosen alternative (optional but recommended — 3 variants > 2 for statistical power).
 
    The fields are contenteditable divs (NOT standard `<input>`/`<textarea>`), so `form_input` errors with `Element type "DIV" is not a supported form input`. Use `left_click` on the field's ref, then `computer` action `type` with the variant text. After all required fields are filled, the dialog footer flips from "2nd title is required" to a green checkmark + "Title test ready" — that's the gate to the Set test button.
 
@@ -139,20 +139,18 @@ title: "<original title>"
 published_at: <RFC3339 from videos.json>
 test_kind: title
 mode: native
-variants:
+variants:                          # exactly the 3 the test runs: original + the 2 the user chose
   - kind: original
     text: "<original title>"
-  - kind: outcome-led
-    text: "<candidate 1>"
-  - kind: surprise-led
-    text: "<candidate 2>"
-  - kind: identity-led
-    text: "<candidate 3>"
+  - kind: <angle of chosen alt 1>   # e.g. surprise-led
+    text: "<chosen alternative 1>"
+  - kind: <angle of chosen alt 2>   # e.g. identity-led
+    text: "<chosen alternative 2>"
 started_at: <RFC3339 UTC now>
 estimated_end_at: <started_at + 14 days>
 status: running
 winner: ""
-notes: ""
+notes: "<e.g. which 3rd candidate was generated but not run, and why>"
 ```
 
 The file is gitignored by default (per `.gitignore`'s `data/launch-experiments/` rule). The Sunday weekly review reads these and surfaces running tests in the report.
@@ -163,7 +161,7 @@ If you modified anything tracked (e.g. the SKILL.md), commit + push. Otherwise j
 
 ### 8. Report to user
 
-- ✓ Test running in YT Studio with 4 variants (1 original + 3 alternatives)
+- ✓ Test running in YT Studio with 3 variants (1 original + 2 alternatives)
 - ✓ YT will pick winner by **watch time** in ~2 weeks (mention this — counterintuitive!)
 - ✓ Recorded to `data/launch-experiments/<id>.yaml`
 - The Sunday weekly review will surface this experiment's status
